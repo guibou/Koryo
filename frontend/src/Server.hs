@@ -4,17 +4,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 module Server where
-import Data.Char (isPunctuation, isSpace)
-import Data.Monoid (mappend)
 import Data.Text (Text)
-import Control.Exception (finally)
 import Control.Monad (forM_, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, modifyMVar, readMVar)
-import qualified Data.Text as T
+import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar)
 import qualified Data.Text.IO as T
 import Koryo
 import Data.Aeson as Aeson
-import Debug.Trace
 
 import qualified Network.WebSockets as WS
 
@@ -57,7 +52,7 @@ main = do
 application :: MVar ServerState -> WS.ServerApp
 application stateRef pending = do
     conn <- WS.acceptRequest pending
-    print "Connection accepted"
+    putStrLn "Connection accepted"
     WS.forkPingThread conn 30
     -- WS.withPingThread conn 30 (return ()) $ do
 
@@ -67,11 +62,11 @@ application stateRef pending = do
         WS.sendTextData conn (Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! (min (currentDebugClient state) 3)))
         msg <- WS.receiveData @(Maybe KoryoCommands) conn
         case msg of
-          Nothing -> print "error when decoding message"
+          Nothing -> putStrLn "error when decoding message"
           Just m -> case m of
-            AddPlayer s -> print "un bolos veut jouer"
+            AddPlayer _s -> putStrLn "un bolos veut jouer"
             ChangePlayer i -> do
-              modifyMVar_ stateRef (\state -> pure $ state {currentDebugClient = i})
+              modifyMVar_ stateRef (\s -> pure $ s {currentDebugClient = i})
             SelectHand s -> do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = hugeRevealPhase $ selectCard (currentDebugClient state) s (Server.game state)})
 
@@ -83,10 +78,10 @@ instance WS.WebSocketsData (Maybe KoryoCommands) where
   fromDataMessage (WS.Binary _) = error "WTF"
 
 instance WS.WebSocketsData Game where
-  toLazyByteString m = traceShow m (Aeson.encode m)
+  toLazyByteString m = Aeson.encode m
 
 instance WS.WebSocketsData Hand where
-  toLazyByteString m = traceShow m (Aeson.encode m)
+  toLazyByteString m = Aeson.encode m
 
 instance WS.WebSocketsData Payload where
-  toLazyByteString m = traceShow m (Aeson.encode m)
+  toLazyByteString m = Aeson.encode m

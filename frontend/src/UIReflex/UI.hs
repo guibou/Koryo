@@ -21,14 +21,9 @@ import Reflex.Dom
 import qualified Data.Text as Text
 import Control.Monad (void)
 import PyF (fmt)
-import Text.Read
-import Data.Maybe (fromMaybe)
-import Control.Monad (zipWithM_)
-import Data.Text (Text)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Text.Encoding
-import Reflex.Collection
 
 import Koryo
 import Assets
@@ -114,9 +109,9 @@ widgetGame dPayload = do
   pure $ leftmost [handSelection, ePlayer]
 
 widgetBurger :: MonadWidget t m => Dynamic t Int -> m ()
-widgetBurger count = do
+widgetBurger val = do
   void $ elClass "div" "burger" $ do
-    simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> count) $ \dValue -> do
+    simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
       el "div" $ el "span" $ display dValue
 
 go :: IO ()
@@ -165,6 +160,6 @@ handSelector cards = mdo
   display validSelection
 
   -- TODO: grey out the button
-  b <- button "Validate Selection"
+  (button, _) <- elAttr' "button" ("text" =: "Validate Selection") $ blank
 
-  pure (flip fforMaybe id $ current validSelection <@ b)
+  pure (flip fforMaybe id $ current validSelection <@ (domEvent Click button))
