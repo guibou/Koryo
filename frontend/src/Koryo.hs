@@ -19,6 +19,7 @@ import Control.Lens
 import Data.Aeson
 import GHC.Generics
 import Data.Generics.Labels()
+import Data.List (delete)
 
 data Card
   = C1_GivePrio
@@ -60,13 +61,14 @@ data Hand
   | NothingToDo
   deriving (Show, Generic, ToJSON, FromJSON)
 
+-- TODO: refactor that to a single type, such as:
 data Action
-  = Flip -- Action of the black -1. Must select
-  | Kill -- Action of the red -1. Must select.
+  = Flip Int -- Action of the black -1. Must select
+  | Kill Int -- Action of the red -1. Must select.
   | TakeCoin -- Action of the 6. Can be automated
   | StealCoin -- Action of the 2. Must select.
   | DestroyCard -- Action of the 4. Can be automated
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Game = Game
   {
@@ -236,8 +238,11 @@ revealPlayer :: SelectedFromDraw -> Player -> (Player, [Action])
 revealPlayer handle player = let
   newCards = selectionToMap handle
   actions = [TakeCoin, StealCoin, DestroyCard]
-    <> (replicate (fromMaybe 0 (Map.lookup Cm1_KillOne newCards)) Kill)
-    <> (replicate (fromMaybe 0 (Map.lookup Cm1_FlipTwo newCards)) Flip)
+    <> catMaybes [
+    Flip <$> Map.lookup Cm1_FlipTwo newCards,
+    Kill <$> Map.lookup Cm1_KillOne newCards
+    ]
+
 
   in (player {
      board = Map.unionWith (+) (board player) newCards
@@ -312,6 +317,14 @@ areAllSelected (x:xs) = do
     Selected l -> Just (l:ls)
     _ -> Nothing
 
+takeCoinInTheBank :: TopLevelGame -> Int -> TopLevelGame
+takeCoinInTheBank tg playerId
+  | availableCoins (game tg) == 0 = tg
+  | otherwise = over (#game . #players . ix playerId . #nbCoins) (+1) $
+                over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete TakeCoin l)) $
+                over (#game . #availableCoins) (subtract 1) tg
+
+
 -- * Random sampling primitive
 
 weightedPickMap :: Map Card Int -> Int -> StdGen -> (Map Card Int, StdGen)
@@ -351,6 +364,8 @@ data KoryoCommands
   | ChangePlayer Int
   | SelectHand SelectedFromDraw
   | EndTurn
+  | TakeCoinCommand
+  | DestroyCardCommand
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data Payload = Payload Game Hand Int
@@ -363,8 +378,9 @@ data Payload = Payload Game Hand Int
 -- 3:
 -- 4: (automatic during a RUN)
 -- OK. 5 (with 1): handled in UI
--- 6. (automatic during a RUN)
--- 7: (Only possible with actions)
+-- OK 6. (automatic during a RUN?)
+-- OK 7: (Only possible with actions)
 -- OK. 8 (with 1): handled
 -- OK. 9: handled (only for score)
--- -1
+-- -1 black (will work with 2)
+-- -1 red (will work with 7)

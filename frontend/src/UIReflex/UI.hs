@@ -24,6 +24,8 @@ import PyF (fmt)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Text.Encoding
+import Data.Traversable (for)
+import Data.Bool (bool)
 
 import Koryo
 import Assets
@@ -67,18 +69,37 @@ displayCards cards = do
         widgetBurger dCount
         pure e
 
-displayHand :: MonadWidget t m => Bool -> Hand -> m (Event t KoryoCommands)
+displayHand :: forall t m. MonadWidget t m => (Card -> Bool) -> Hand -> m (Event t KoryoCommands)
 displayHand _ NothingToDo = text "Wait until it is your turn" >> pure never
-displayHand majorityOf5 (Draw m) = fmap SelectHand <$> handSelector majorityOf5 m
+displayHand majoritySelector (Draw m) = fmap SelectHand <$> handSelector (majoritySelector C5_TakeTwoDifferent) m
 displayHand _ (Selected sel) = do
   text "You selected some cards"
   void $ displayCards (constDyn (selectionToMap sel))
   pure never
-displayHand _ (DoActions actions) = do
-  text (Text.pack $ show actions)
-  b <- button "End turn"
+displayHand majoritySelector (DoActions actions) = do
+  e <- for actions $ \a -> do
+    let
+      -- TODO: check that some action can be done
+      (t, enabled, action :: Event t () -> Event t KoryoCommands) = case a of
+        -- TODO: not handled yet
+        Flip i -> (text [fmt|Flip {i}|], (i /= 0), const never)
+        -- TODO: not handled yet
+        Kill i -> (text [fmt|Kill {i}|], (i /= 0), const never)
+        -- TODO: not handled yet
+        StealCoin -> (text "StealCoin", majoritySelector C2_Ninja, const never)
+        -- TODO: check that there is coin in the bank
+        TakeCoin -> (text "TakeCoin", majoritySelector C6_Bank, fmap (const TakeCoinCommand))
+        -- TODO: check that there is something to destroy
+        DestroyCard -> (text "DestroyCard", majoritySelector C4_KillMinusOne, fmap (const DestroyCardCommand))
+    (b, _) <- elAttr' "button" (bool ("disabled" =: "disabled") mempty enabled) t
+
+    pure (action (domEvent Click b))
+
+  (b, _) <- el' "button" $ text "End Turn"
+
   pure $ leftmost [
-    EndTurn <$ b
+    EndTurn <$ domEvent Click b,
+    leftmost e
     ]
 
 widgetGame :: MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
@@ -112,7 +133,7 @@ widgetGame dPayload = do
     switchHold never evts
 
   handSelection <- elClass "div" "handle" $ do
-    e <- dyn (displayHand <$> ((\(p, pID) -> (evaluateMajorityFor C5_TakeTwoDifferent . map board . players) p == Just pID) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
+    e <- dyn (displayHand <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
     switchHold never e
 
   pure $ leftmost [handSelection, ePlayer]

@@ -74,6 +74,9 @@ application stateRef pending = do
                                       pure $ state {
                                        Server.game = endPlayerTurn (Server.game state)
                                        })
+            TakeCoinCommand -> do
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = takeCoinInTheBank (Server.game state) (currentDebugClient state)})
+
 
 
 
