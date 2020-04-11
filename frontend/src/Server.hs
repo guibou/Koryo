@@ -76,6 +76,9 @@ application stateRef pending = do
                                        })
             TakeCoinCommand -> do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = takeCoinInTheBank (Server.game state) (currentDebugClient state)})
+            DestroyCardCommand -> do
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = destroyAPersonalCard (Server.game state) (currentDebugClient state)})
+
 
 
 

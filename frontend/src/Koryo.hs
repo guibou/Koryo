@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -284,8 +285,8 @@ tellHimToDoNothing tg = tg {
 
 nextRound :: Game -> Game
 nextRound game = game {
-  currentFirstPlayer = currentFirstPlayer game + 1 `mod` (length (players game)),
-  selectedPlayer = currentFirstPlayer game + 1 `mod` (length (players game)),
+  currentFirstPlayer = (currentFirstPlayer game + 1) `mod` (length (players game)),
+  selectedPlayer = (currentFirstPlayer game + 1) `mod` (length (players game)),
   currentRound = currentRound game + 1,
   phase = Drawing
   }
@@ -324,6 +325,15 @@ takeCoinInTheBank tg playerId
                 over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete TakeCoin l)) $
                 over (#game . #availableCoins) (subtract 1) tg
 
+destroyAPersonalCard :: TopLevelGame -> Int -> TopLevelGame
+destroyAPersonalCard tg playerId
+  | Just n <- Map.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
+  , n > 0 = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $
+                over (#game . #players . ix playerId . #board) (Map.insert Cm1_KillOne (n - 1)) $ tg
+  | Just n <- Map.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
+  , n > 0 = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $
+                over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
+  | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
 
 -- * Random sampling primitive
 
