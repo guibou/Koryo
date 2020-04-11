@@ -116,7 +116,9 @@ widgetBurger val = do
 
 go :: IO ()
 go = mainWidgetWithCss css $ mdo
-  raw <- jsonWebSocket @KoryoCommands @Payload "ws://localhost:9160" $ def {
+  currentHost <- Text.takeWhile (/=':') <$> getLocationHost
+
+  raw <- jsonWebSocket @KoryoCommands @Payload ("ws://" <> currentHost <> ":9160") $ def {
     _webSocketConfig_send = pure <$> sentEvt
     }
 

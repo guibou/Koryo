@@ -47,7 +47,7 @@ broadcast message state = do
 main :: IO ()
 main = do
     state <- newMVar newServerState
-    WS.runServer "127.0.0.1" 9160 $ application state
+    WS.runServer "0.0.0.0" 9160 $ application state
 
 application :: MVar ServerState -> WS.ServerApp
 application stateRef pending = do
