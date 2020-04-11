@@ -67,19 +67,27 @@ displayCards cards = do
         widgetBurger dCount
         pure e
 
-displayHand :: MonadWidget t m => Hand -> m (Event t KoryoCommands)
-displayHand NothingToDo = text "Wait until it is your turn" >> pure never
-displayHand (Draw m) = fmap SelectHand <$> handSelector m
-displayHand (Selected sel) = do
+displayHand :: MonadWidget t m => Bool -> Hand -> m (Event t KoryoCommands)
+displayHand _ NothingToDo = text "Wait until it is your turn" >> pure never
+displayHand majorityOf5 (Draw m) = fmap SelectHand <$> handSelector majorityOf5 m
+displayHand _ (Selected sel) = do
   text "You selected some cards"
   void $ displayCards (constDyn (selectionToMap sel))
   pure never
-displayHand (DoActions _) = text "Whaaa, it's your turn, you can do some actions, perhaps..." >> pure never
+displayHand _ (DoActions actions) = do
+  text (Text.pack $ show actions)
+  b <- button "End turn"
+  pure $ leftmost [
+    EndTurn <$ b
+    ]
 
 widgetGame :: MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
 widgetGame dPayload = do
-  let dg = (\(Payload g _) -> g) <$> dPayload
-  let dHand = (\(Payload _ h) -> h) <$> dPayload
+  let dg = (\(Payload g _ _) -> g) <$> dPayload
+  let dHand = (\(Payload _ h _) -> h) <$> dPayload
+  let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dPayload
+
+  display (phase <$> dg)
 
   elClass "div" "gameStatus" $ do
     let
@@ -91,6 +99,7 @@ widgetGame dPayload = do
     el "p" $ dynText $ (\g -> [fmt|{cardsDrawAtRound $ currentRound g:d} / {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
     tg "Available coins: " availableCoins
     tg "Current first player: " currentFirstPlayer
+    tg "Current player: " selectedPlayer
     display (computeScores . players <$> dg)
 
   (ePlayer :: _) <- elClass "div" "players" $ do
@@ -103,7 +112,7 @@ widgetGame dPayload = do
     switchHold never evts
 
   handSelection <- elClass "div" "handle" $ do
-    e <- dyn (displayHand <$> dHand)
+    e <- dyn (displayHand <$> ((\(p, pID) -> (evaluateMajorityFor C5_TakeTwoDifferent . map board . players) p == Just pID) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
     switchHold never e
 
   pure $ leftmost [handSelection, ePlayer]
@@ -137,8 +146,8 @@ go = mainWidgetWithCss css $ mdo
 
   pure ()
 
-handSelector :: MonadWidget t m => Map Card Int -> m (Event t SelectedFromDraw)
-handSelector cards = mdo
+handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
+handSelector majorityOf5 cards = mdo
   currentSelection <- foldDyn (\m' m -> Map.filter (/=0) $ Map.unionWith (+) m m')  Map.empty (leftmost [
                                                                               eSelect,
                                                                               fmap negate <$> eUnselect
@@ -161,7 +170,13 @@ handSelector cards = mdo
 
   display validSelection
 
+  let buttonStatus = ffor validSelection $ \sel -> case sel of
+        Just (SelectTwo _ _)
+          | majorityOf5 -> mempty
+        Just (SelectMany _ _) -> mempty
+        _ -> "disabled" =: "disabled"
+
   -- TODO: grey out the button
-  (button, _) <- elAttr' "button" ("text" =: "Validate Selection") $ blank
+  (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
 
   pure (flip fforMaybe id $ current validSelection <@ (domEvent Click button))

@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -11,12 +12,13 @@ import Data.Map (Map)
 import System.Random
 import System.Random.Shuffle
 import Data.List (find)
-import Data.Maybe (fromMaybe,catMaybes)
+import Data.Maybe (fromMaybe,catMaybes,fromJust)
 import Test.Hspec
 import Data.Bool (bool)
 import Control.Lens
 import Data.Aeson
 import GHC.Generics
+import Data.Generics.Labels()
 
 data Card
   = C1_GivePrio
@@ -54,8 +56,16 @@ data Player = Player
 data Hand
   = Draw (Map Card Int)
   | Selected SelectedFromDraw
-  | DoActions [Card]
+  | DoActions [Action]
   | NothingToDo
+  deriving (Show, Generic, ToJSON, FromJSON)
+
+data Action
+  = Flip -- Action of the black -1. Must select
+  | Kill -- Action of the red -1. Must select.
+  | TakeCoin -- Action of the 6. Can be automated
+  | StealCoin -- Action of the 2. Must select.
+  | DestroyCard -- Action of the 4. Can be automated
   deriving (Show, Generic, ToJSON, FromJSON)
 
 data Game = Game
@@ -64,8 +74,12 @@ data Game = Game
     currentRound :: Int,
     availableCoins :: Int,
     currentFirstPlayer :: Int,
-    selectedPlayer :: Int
+    selectedPlayer :: Int,
+    phase :: Phase
    }
+  deriving (Show, Generic, ToJSON, FromJSON)
+
+data Phase = Drawing | Playing | Destroying
   deriving (Show, Generic, ToJSON, FromJSON)
 
 data TopLevelGame = TopLevelGame
@@ -74,7 +88,7 @@ data TopLevelGame = TopLevelGame
     randomGenerator :: StdGen,
     handles :: [Hand]
   }
-  deriving (Show)
+  deriving (Show, Generic)
 
 startGame :: Int -> TopLevelGame
 startGame seed = TopLevelGame {
@@ -83,7 +97,8 @@ startGame seed = TopLevelGame {
       currentRound = 1,
       currentFirstPlayer = 0,
       availableCoins = 8,
-      selectedPlayer = 0
+      selectedPlayer = 0,
+      phase = Drawing
       },
     handles = [],
     randomGenerator = mkStdGen seed
@@ -217,10 +232,16 @@ selectionToMap sel = case sel of
   SelectTwo c c' -> Map.fromList [(c, 1), (c', 1)]
 
 
-revealPlayer :: SelectedFromDraw -> Player -> Player
+revealPlayer :: SelectedFromDraw -> Player -> (Player, [Action])
 revealPlayer handle player = let
   newCards = selectionToMap handle
-  in player { board = Map.unionWith (+) (board player) newCards }
+  actions = [TakeCoin, StealCoin, DestroyCard]
+    <> (replicate (fromMaybe 0 (Map.lookup Cm1_KillOne newCards)) Kill)
+    <> (replicate (fromMaybe 0 (Map.lookup Cm1_FlipTwo newCards)) Flip)
+
+  in (player {
+     board = Map.unionWith (+) (board player) newCards
+     }, actions)
 
 -- TODO: the powers! (And user interaction!)
 
@@ -231,24 +252,56 @@ C) End of game
    - Count the points
 -}
 
-hugeRevealPhase :: TopLevelGame -> TopLevelGame
-hugeRevealPhase tg@TopLevelGame{game, handles, randomGenerator} = case areAllSelected handles of
+attemptRevealPhase :: TopLevelGame -> TopLevelGame
+attemptRevealPhase tg@TopLevelGame{game, handles} = case areAllSelected handles of
   Nothing -> tg
   Just newCards -> let
-    newGame = TopLevelGame {
-      handles = [],
-      randomGenerator = randomGenerator,
+    (newPlayer', actions) = revealPlayer (fromJust $ newCards ^? ix (currentFirstPlayer game)) ((players game) !! (currentFirstPlayer game))
+    newGame = tg {
       game = game {
-          players = zipWith revealPlayer newCards (players game)
-          }
+          selectedPlayer = currentFirstPlayer game,
+          players = set (ix (currentFirstPlayer game)) newPlayer' (players game),
+          phase = Playing
+          },
+      handles = set (ix (currentFirstPlayer game)) (DoActions actions) handles
       }
-    in
-    drawPhase (newGame {
-                  game = (Koryo.game newGame) {
-                      currentRound = currentRound game + 1,
-                      currentFirstPlayer = currentFirstPlayer game + 1
-                      }
-                  })
+    in newGame
+
+nextPlayer :: Game -> Game
+nextPlayer game = game {
+  selectedPlayer = (selectedPlayer game + 1) `mod` (length (players game))
+  }
+
+tellHimToDoNothing :: TopLevelGame -> TopLevelGame
+tellHimToDoNothing tg = tg {
+  handles = set (ix (selectedPlayer (game tg))) NothingToDo (handles tg)
+  }
+
+nextRound :: Game -> Game
+nextRound game = game {
+  currentFirstPlayer = currentFirstPlayer game + 1 `mod` (length (players game)),
+  selectedPlayer = currentFirstPlayer game + 1 `mod` (length (players game)),
+  currentRound = currentRound game + 1,
+  phase = Drawing
+  }
+
+endPlayerTurn :: TopLevelGame -> TopLevelGame
+endPlayerTurn (over #game nextPlayer . tellHimToDoNothing ->tg)
+  | selectedPlayer (game tg) /= currentFirstPlayer (game tg) =
+    let
+      newCards = (\(Selected l) -> l) (handles tg !! (selectedPlayer (game tg)))
+      (newPlayer', actions) = revealPlayer newCards (players (game tg) !! selectedPlayer (game tg))
+      newGame = tg {
+        game = (game tg) {
+            players = set (ix (selectedPlayer (game tg))) newPlayer' (players (game tg))
+            },
+        handles = set (ix (selectedPlayer (game tg))) (DoActions actions) (handles tg)
+        }
+    in newGame
+  | otherwise = drawPhase (tg {
+                              game = nextRound (game tg)
+                              })
+
 
 areAllSelected :: [Hand] -> Maybe [SelectedFromDraw]
 areAllSelected [] = Just []
@@ -297,12 +350,21 @@ data KoryoCommands
   = AddPlayer String
   | ChangePlayer Int
   | SelectHand SelectedFromDraw
+  | EndTurn
   deriving (ToJSON, FromJSON, Generic, Show)
 
-data Payload = Payload Game Hand
+data Payload = Payload Game Hand Int
   deriving (ToJSON, FromJSON, Generic, Show)
 
 
 -- Powers
--- 8 (with 1): handled
--- 9: handled
+-- OK. 1: see others
+-- 2: (only possible with actions)
+-- 3:
+-- 4: (automatic during a RUN)
+-- OK. 5 (with 1): handled in UI
+-- 6. (automatic during a RUN)
+-- 7: (Only possible with actions)
+-- OK. 8 (with 1): handled
+-- OK. 9: handled (only for score)
+-- -1

@@ -59,7 +59,7 @@ application stateRef pending = do
     -- TODO: take disconnection into account
     forever $ do
         state <- readMVar stateRef
-        WS.sendTextData conn (Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! (min (currentDebugClient state) 3)))
+        WS.sendTextData conn (Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! (min (currentDebugClient state) 3)) (currentDebugClient state))
         msg <- WS.receiveData @(Maybe KoryoCommands) conn
         case msg of
           Nothing -> putStrLn "error when decoding message"
@@ -68,7 +68,13 @@ application stateRef pending = do
             ChangePlayer i -> do
               modifyMVar_ stateRef (\s -> pure $ s {currentDebugClient = i})
             SelectHand s -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = hugeRevealPhase $ selectCard (currentDebugClient state) s (Server.game state)})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = attemptRevealPhase $ selectCard (currentDebugClient state) s (Server.game state)})
+            EndTurn -> do
+              modifyMVar_ stateRef (\state ->
+                                      pure $ state {
+                                       Server.game = endPlayerTurn (Server.game state)
+                                       })
+
 
 
         print msg

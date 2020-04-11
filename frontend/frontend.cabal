@@ -39,6 +39,7 @@ library
                      , aeson
                      , file-embed
                      , base64-bytestring
+                     , generic-lens
   default-extensions:
 
   ghc-options: -Wall -Wno-partial-type-signatures -Wincomplete-uni-patterns

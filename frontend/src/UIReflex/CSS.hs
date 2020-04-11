@@ -16,7 +16,7 @@ css = (encodeUtf8 . toStrict . render) $ do
     backgroundColor white
 
   ".gameStatus" ?
-    display flex
+    mempty
 
   ".players" ? do
     display flex
