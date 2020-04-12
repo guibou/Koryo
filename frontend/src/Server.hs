@@ -15,7 +15,8 @@ import Data.Generics.Labels()
 import Data.Aeson as Aeson
 import Data.List (find)
 import GHC.Generics
-import Control.Exception (bracket)
+import Control.Exception (bracket, try,SomeException)
+import Control.Monad (void)
 
 import qualified Network.WebSockets as WS
 
@@ -38,7 +39,7 @@ broadcastPayload stateRef = bracket (takeMVar stateRef)
     forM_ (clients state) $ \(pId, conn) -> do
       let
         message = Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! pId) pId
-      WS.sendTextData conn message
+      void $ try @SomeException $ WS.sendTextData conn message
 
 main :: IO ()
 main = do
