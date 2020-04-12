@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
 module Koryo where
 
 import qualified Data.Map as Map
@@ -58,17 +59,17 @@ data Player = Player
 data Hand
   = Draw (Map Card Int)
   | Selected SelectedFromDraw
-  | DoActions [Action]
+  | DoActions Actions
   | NothingToDo
   deriving (Show, Generic, ToJSON, FromJSON)
 
--- TODO: refactor that to a single type, such as:
-data Action
-  = Flip Int -- Action of the black -1. Must select
-  | Kill Int -- Action of the red -1. Must select.
-  | TakeCoin -- Action of the 6. Can be automated
-  | StealCoin -- Action of the 2. Must select.
-  | DestroyCard -- Action of the 4. Can be automated
+data Actions = Actions {
+  flipAction :: Int, -- Action of the black -1. Must select
+  kill :: Int, -- Action of the red -1. Must select.
+  takeCoin :: Bool, -- Action of the 6. Can be automated
+  stealCoin :: Bool, -- Action of the 2. Must select.
+  destroyCard :: Bool -- Action of the 4. Can be automated
+  }
   deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Game = Game
@@ -235,14 +236,16 @@ selectionToMap sel = case sel of
   SelectTwo c c' -> Map.fromList [(c, 1), (c', 1)]
 
 
-revealPlayer :: SelectedFromDraw -> Player -> (Player, [Action])
+revealPlayer :: SelectedFromDraw -> Player -> (Player, Actions)
 revealPlayer handle player = let
   newCards = selectionToMap handle
-  actions = [TakeCoin, StealCoin, DestroyCard]
-    <> catMaybes [
-    Flip <$> Map.lookup Cm1_FlipTwo newCards,
-    Kill <$> Map.lookup Cm1_KillOne newCards
-    ]
+  actions = Actions {
+    takeCoin = True,
+    stealCoin = True,
+    destroyCard = True,
+    flipAction = fromMaybe 0 (Map.lookup Cm1_FlipTwo newCards),
+    kill = fromMaybe 0 (Map.lookup Cm1_KillOne newCards)
+    }
 
 
   in (player {
@@ -322,28 +325,40 @@ takeCoinInTheBank :: TopLevelGame -> Int -> TopLevelGame
 takeCoinInTheBank tg playerId
   | availableCoins (game tg) == 0 = tg
   | otherwise = over (#game . #players . ix playerId . #nbCoins) (+1) $
-                over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete TakeCoin l)) $
+                over (#handles . ix playerId) (\(DoActions a) -> DoActions $ a { takeCoin = False }) $
                 over (#game . #availableCoins) (subtract 1) tg
 
 destroyAPersonalCard :: TopLevelGame -> Int -> TopLevelGame
 destroyAPersonalCard tg playerId
   | Just n <- Map.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
-  , n > 0 = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $
+  , n > 0 = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False })) $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_KillOne (n - 1)) $ tg
   | Just n <- Map.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
-  , n > 0 = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $
+  , n > 0 = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False })) $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
-  | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
+  | otherwise = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False})) $ tg
 
 stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
 stealACoinToPlayer tg currentPlayerId otherPlayerId
   | (nbCoins . (!! otherPlayerId) . players . game) tg > 0 =
     over (#game . #players . ix currentPlayerId . #nbCoins) (+1) $
     over (#game . #players . ix otherPlayerId . #nbCoins) (subtract 1) $
-    over (#handles . ix currentPlayerId) (\(DoActions l) -> DoActions (delete StealCoin l)) $ tg
+    over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (a { stealCoin = False })) $ tg
   | otherwise =
-    over (#handles . ix currentPlayerId) (\(DoActions l) -> DoActions (delete StealCoin l)) $ tg
+    over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (a { stealCoin = False })) $ tg
 
+fireCommand :: TopLevelGame -> Int -> (Int, Card) -> TopLevelGame
+fireCommand tg currentPlayerId (targetId, card) =
+  -- TODO: do some check
+  over (#game . #players . ix targetId . #board) (Map.insertWith (+) card (-1)) $
+  over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (over #kill (subtract 1) a)) $ tg
+
+flipCommand :: TopLevelGame -> Int -> (Int, Card) -> (Int, Card) -> TopLevelGame
+flipCommand tg currentPlayerId (targetId, card) (targetId', card') =
+  -- TODO: do some check
+  over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromList [(card, (-1)), (card', 1)])) $
+  over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
+  over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (over #flipAction (subtract 1) a)) $ tg
 
   -- | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
 
@@ -389,6 +404,8 @@ data KoryoCommands
   | TakeCoinCommand
   | DestroyCardCommand
   | StealACoinToPlayer Int
+  | FireCommand (Int, Card)
+  | FlipCommand (Int, Card) (Int, Card)
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data Payload = Payload Game Hand Int

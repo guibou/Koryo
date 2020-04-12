@@ -29,6 +29,17 @@ css = (encodeUtf8 . toStrict . render) $ do
   ".cards" ? do
     display flex
 
+  ".card.selected" ? do
+    outlineWidth (px 5)
+    outlineStyle solid
+    zIndex 1
+
+  ".selecting-flip" ? ".card.selected" ? do
+    outlineColor black
+
+  ".selecting-fire" ? ".card.selected" ? do
+    outlineColor red
+
   ".card" ? do
     position relative
 

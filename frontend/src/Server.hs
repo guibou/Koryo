@@ -82,8 +82,10 @@ application stateRef pending = do
             StealACoinToPlayer i -> do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = stealACoinToPlayer (Server.game state) (currentDebugClient state) i})
 
-
-
+            FireCommand c -> do
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = fireCommand (Server.game state) (currentDebugClient state) c})
+            FlipCommand c c' -> do
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = flipCommand (Server.game state) (currentDebugClient state) c c'})
 
 
         print msg

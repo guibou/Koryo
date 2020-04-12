@@ -13,11 +13,11 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-module UIReflex.UI (go) where
+module UIReflex.UI (runUI) where
 
 import UIReflex.CSS
 
-import Reflex.Dom
+import Reflex.Dom hiding (FireCommand)
 import qualified Data.Text as Text
 import Control.Monad (void)
 import PyF (fmt)
@@ -26,9 +26,13 @@ import Data.Map (Map)
 import Data.Text.Encoding
 import Data.Traversable (for)
 import Data.Bool (bool)
+import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 
 import Koryo
 import Assets
+import qualified Data.Set as Set
+import Data.Set (Set)
 
 data GameState = NotPlaying
   deriving (Show)
@@ -43,9 +47,19 @@ listDyn input = do
 
   holdUniqDynBy f newDyn
 
-playerWidget :: MonadWidget t m => Dynamic t (Int -> Bool) -> (Int, Dynamic t Player) -> m (Event t KoryoCommands)
-playerWidget canStealDyn (playerNumber, player) = do
-  (block, eStealCoin) <- el' "div" $ do
+projectCardSelection pId cm = Set.fromList $ map snd $ filter ((==pId).fst) $ go cm
+  where
+    go NotSelecting = []
+    go (Selecting (SelectingFire Nothing)) = []
+    go (Selecting (SelectingFire (Just (pId', c)))) = [(pId', c)]
+    go (Selecting (SelectingFlip Nothing)) = []
+    go (Selecting (SelectingFlip (Just ((pId', c), m)))) = (pId', c):case m of
+      Nothing -> []
+      Just v -> [v]
+
+playerWidget :: MonadWidget t m => Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
+playerWidget canStealDyn cardSelectDyn (playerNumber, player) = do
+  (block, eStealCoin) <- el' "div" $ mdo
     elClass "div" "name" $ dynText (Text.pack . name <$> player)
     eStealCoin <- elClass "div" "coin" $ do
       display (nbCoins <$> player)
@@ -54,19 +68,57 @@ playerWidget canStealDyn (playerNumber, player) = do
 
       pure (StealACoinToPlayer playerNumber <$ domEvent Click b)
 
+    eventSelectCard <- displayCards (projectCardSelection playerNumber <$> cardSelectDyn) (board <$> player)
+    pure [Right <$> eStealCoin, Left . (playerNumber,) <$> eventSelectCard]
 
-    void $ displayCards (board <$> player)
-    pure eStealCoin
   pure $ leftmost [
-    ChangePlayer playerNumber <$ domEvent Click block,
-    eStealCoin
+    Right <$> (ChangePlayer playerNumber <$ domEvent Click block),
+    leftmost eStealCoin
     ]
 
-displayCards :: MonadWidget t m => Dynamic t (Map Card Int) -> m (Event t (Map Card Int))
-displayCards cards = do
-  elClass "div" "cards" $ do
-    listViewWithKey cards $ \card dCount -> do
-      elClass "div" "card" $ do
+data CardSelectionMode
+  = NotSelecting
+  | Selecting SelectionMode
+  deriving (Show)
+
+data SelectionMode
+  = SelectingFire (Maybe (Int, Card))
+  | SelectingFlip (Maybe ((Int, Card), Maybe (Int, Card)))
+  deriving (Show)
+
+updateSelection :: (Int -> Attack -> Bool) -> (Int, Card) -> CardSelectionMode -> CardSelectionMode
+updateSelection _ _ NotSelecting = NotSelecting
+updateSelection _canBeFocused (_target, card) currentSel
+  | card == Cm1_KillOne || card == Cm1_FlipTwo = currentSel -- You do not have the right to select a -1
+updateSelection canBeFocused sel@(target, card) currentSel@(Selecting (SelectingFire b))
+  | not (canBeFocused target FireAttack) = currentSel -- This player cannot be selected
+  | otherwise = Selecting $ SelectingFire $ case b of
+  Just sel'
+    | sel == sel' -> Nothing -- Unselect same card
+  _ -> Just sel -- Select (and replace)
+updateSelection canBeFocused sel@(player, _) currentSel@(Selecting (SelectingFlip b))
+  | not (canBeFocused player FlipAttack) = currentSel -- Do nothing, we cannot target this player
+  | otherwise = Selecting $ SelectingFlip $ case b of
+    Nothing -> Just (sel, Nothing) -- Select
+    Just (sel'@(player', _), Nothing)
+      | sel' == sel -> Nothing -- Unselect same card
+      | player == player' -> Just (sel, Nothing) -- Replace selection on that player
+      | otherwise -> Just (sel', Just sel) -- Add to selection
+    Just (sel'@(player', _), Just sel''@(player'', _))
+      | sel' == sel -> Just (sel'', Nothing) -- Unselect same card
+      | sel'' == sel -> Just (sel', Nothing) -- Unselect same card
+      | player' == player -> Just (sel'', Just sel) -- Replace selection on first player
+      | player'' == player -> Just (sel', Just sel) -- Replace selection on second player
+      | otherwise -> Just (sel'', Just sel) -- Select and discard the oldest
+
+displayCards :: MonadWidget t m => Dynamic t (Set Card) -> Dynamic t (Map Card Int) -> m (Event t Card)
+displayCards selectedCards cards = do
+  selectCardEvent <- elClass "div" "cards" $ do
+    listViewWithKey (Map.filter (/=0) <$> cards) $ \card dCount -> do
+      let selected selStatus
+            | card `Set.member` selStatus = "selected card"
+            | otherwise = "card"
+      elDynClass "div" (selected <$> selectedCards) $ do
         e <- case Map.lookup card card_images of
           Nothing -> text (Text.pack . show $ card) >> pure never
           Just t -> do
@@ -75,91 +127,164 @@ displayCards cards = do
                                --("width", "100")
                              ]) $ pure ()
             let cardClick = domEvent Click e
-            pure $ 1 <$ cardClick
+            pure $ cardClick
         widgetBurger dCount
         pure e
 
-displayHand :: forall t m. MonadWidget t m => (Card -> Bool) -> Hand -> m (Event t KoryoCommands)
-displayHand _ NothingToDo = text "Wait until it is your turn" >> pure never
-displayHand majoritySelector (Draw m) = fmap SelectHand <$> handSelector (majoritySelector C5_TakeTwoDifferent) m
-displayHand _ (Selected sel) = do
-  text "You selected some cards"
-  void $ displayCards (constDyn (selectionToMap sel))
-  pure never
-displayHand majoritySelector (DoActions actions) = do
-  e <- for actions $ \a -> do
-    let
-      -- TODO: check that some action can be done
-      (t, enabled, action :: Event t () -> Event t KoryoCommands) = case a of
-        -- TODO: not handled yet
-        Flip i -> (text [fmt|Flip {i}|], (i /= 0), const never)
-        -- TODO: not handled yet
-        Kill i -> (text [fmt|Kill {i}|], (i /= 0), const never)
-        -- TODO: not handled yet
-        StealCoin -> (text "StealCoin", majoritySelector C2_Ninja, const never)
-        -- TODO: check that there is coin in the bank
-        TakeCoin -> (text "TakeCoin", majoritySelector C6_Bank, fmap (const TakeCoinCommand))
-        -- TODO: check that there is something to destroy
-        DestroyCard -> (text "DestroyCard", majoritySelector C4_KillMinusOne, fmap (const DestroyCardCommand))
-    (b, _) <- elAttr' "button" (bool ("disabled" =: "disabled") mempty enabled) t
+  pure $ ffor (Map.keys <$> selectCardEvent) $ \l -> case l of
+    [c] -> c
+    _ -> error "Too many card selected at once. That's impossible"
 
-    pure (action (domEvent Click b))
+selectToCommand :: CardSelectionMode -> Maybe KoryoCommands
+selectToCommand (Selecting (SelectingFlip (Just (a, Just b)))) = Just (FlipCommand a b)
+selectToCommand (Selecting (SelectingFire (Just a))) = Just (FireCommand a)
+selectToCommand _ = Nothing
 
-  (b, _) <- el' "button" $ text "End Turn"
-
-  pure $ leftmost [
-    EndTurn <$ domEvent Click b,
-    leftmost e
-    ]
-
-widgetGame :: MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
-widgetGame dPayload = do
-  let dg = (\(Payload g _ _) -> g) <$> dPayload
-  let dHand = (\(Payload _ h _) -> h) <$> dPayload
-  let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dPayload
+displayHand :: forall t m. MonadWidget t m => Dynamic t CardSelectionMode -> (Card -> Bool) -> Hand -> m (Event t CardSelectionMode, Event t KoryoCommands)
+displayHand _ _ NothingToDo = text "Wait until it is your turn" >> pure (never, never)
+displayHand _ majoritySelector (Draw m) = do
+  e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
+  pure (never, SelectHand <$> e)
+displayHand _ _ (Selected sel) = do
+  text "You selected some cards. Wait until it is your turn to play"
+  void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
+  pure (never, never)
+displayHand currentSelection majoritySelector (DoActions actions) = do
   let
-    canSteal game currentPlayerHand currentPlayerId otherPlayerId =
-      -- enough coins for p1
-      nbCoins (players (game) !! otherPlayerId) > 0
-      -- Have the ninja for current player
-        && evaluateMajorityFor C2_Ninja (map board (players game)) == Just currentPlayerId
-        --  have a Steal command
-        && case currentPlayerHand of
-            DoActions l ->  StealCoin `elem` l
-            _ -> False
-        && currentPlayerId /= otherPlayerId
+    simpleText t = text t >> pure (never, never)
+    btn t enabled event = do
+      (b, _) <- elDynAttr' "button" (bool ("disabled" =: "disabled") mempty <$> enabled) $ text t
 
-    canStealDyn = canSteal <$> dg <*> dHand <*> dCurrentPlayerId
+      pure (event <$ (domEvent Click b))
 
-  display (phase <$> dg)
+    selectCommand = selectToCommand <$> currentSelection
 
-  elClass "div" "gameStatus" $ do
+    -- TODO: check that some action can be done
+  e <- mapM (el "div"$) $
+    [
+      do
+        e <- btn [fmt|Flip {flipAction actions}|] (constDyn $ (flipAction actions) /= 0) (Selecting (SelectingFlip Nothing))
+        runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
+                               Just (FlipCommand _ _) -> True
+                               _ -> False) ()
+        pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+                 ,
+      do
+         e <- btn [fmt|Kill {kill actions}|] (constDyn $ kill actions /= 0) (Selecting (SelectingFire Nothing))
+         runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
+                                   Just (FireCommand _) -> True
+                                   _ -> False) ()
+         pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+                  ,
+      -- TODO: test that there are available coins
+      if majoritySelector C2_Ninja && stealCoin actions
+           then simpleText "You can steal a coin to someone"
+           else pure (never, never)
+                  ,
+      -- TODO: check that there is coin in the bank
+      if majoritySelector C6_Bank && takeCoin actions
+                  then simpleText "You can take a coin in the bank"
+                  else pure (never, never)
+                  ,
+      -- TODO: check that there is something to destroy
+      if destroyCard actions
+           then do
+             e <- btn "DestroyCard" (constDyn $ majoritySelector C4_KillMinusOne) DestroyCardCommand
+             pure (never, e)
+           else pure (never, never)
+                  ]
+
+  let (selectionEvent, commandEvent) = unzip e
+
+  (bEndTurn, _) <- el' "button" $ text "End Turn"
+
+  pure $ (leftmost
+          [
+            -- End of turn clean the selection
+            NotSelecting <$ domEvent Click bEndTurn,
+            -- Any command clean the selection
+            NotSelecting <$ leftmost commandEvent,
+            leftmost selectionEvent
+          ]
+         ,
+          leftmost [
+             EndTurn <$ domEvent Click bEndTurn,
+             leftmost commandEvent
+             ]
+         )
+
+data Attack = FireAttack | FlipAttack
+  deriving (Show)
+
+canBeFocused :: [Map Card Int] -> Int -> Attack -> Bool
+canBeFocused board pId FireAttack = evaluateMajorityFor C7_Warrior board /= Just pId
+canBeFocused board pId FlipAttack = evaluateMajorityFor C2_Ninja board /= Just pId || fromMaybe 0 (Map.lookup C7_Warrior (board !! pId)) /= 0
+
+widgetGame :: forall t m. MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
+widgetGame dPayload = mdo
+  (events, selection) <- elDynClass "div" (ffor selection $ \case
+                                              NotSelecting -> ""
+                                              Selecting (SelectingFire _) -> "selecting-fire"
+                                              Selecting (SelectingFlip _) -> "selecting-flip"
+                                              ) $ mdo
+    let dg = (\(Payload g _ _) -> g) <$> dPayload
+    let dHand = (\(Payload _ h _) -> h) <$> dPayload
+    let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dPayload
     let
-      tg t f = do
-        el "p" $ do
-          text t
-          display (f <$> dg)
-    tg "Current round: " currentRound
-    el "p" $ dynText $ (\g -> [fmt|{cardsDrawAtRound $ currentRound g:d} / {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
-    tg "Available coins: " availableCoins
-    tg "Current first player: " currentFirstPlayer
-    tg "Current player: " selectedPlayer
-    display (computeScores . players <$> dg)
+      canSteal game currentPlayerHand currentPlayerId otherPlayerId =
+        -- enough coins for p1
+        nbCoins (players (game) !! otherPlayerId) > 0
+        -- Have the ninja for current player
+          && evaluateMajorityFor C2_Ninja (map board (players game)) == Just currentPlayerId
+          --  have a Steal command
+          && case currentPlayerHand of
+              DoActions l ->  stealCoin l
+              _ -> False
+          && currentPlayerId /= otherPlayerId
 
-  (ePlayer :: _) <- elClass "div" "players" $ do
-    asList <- listDyn (players <$> dg)
+      canStealDyn = canSteal <$> dg <*> dHand <*> dCurrentPlayerId
 
-    evts <- dyn $ do
-      ffor asList $ \l -> do
-        leftmost <$> mapM (playerWidget canStealDyn) (zip [0..] l)
+    display (phase <$> dg)
 
-    switchHold never evts
+    elClass "div" "gameStatus" $ do
+      let
+        tg t f = do
+          el "p" $ do
+            text t
+            display (f <$> dg)
+      tg "Current round: " currentRound
+      el "p" $ dynText $ (\g -> [fmt|{cardsDrawAtRound $ currentRound g:d} / {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
+      tg "Available coins: " availableCoins
+      tg "Current first player: " currentFirstPlayer
+      tg "Current player: " selectedPlayer
+      display (computeScores . players <$> dg)
 
-  handSelection <- elClass "div" "handle" $ do
-    e <- dyn (displayHand <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
-    switchHold never e
+    (ePlayer :: _) <- elClass "div" "players" $ do
+      asList <- listDyn (players <$> dg)
 
-  pure $ leftmost [handSelection, ePlayer]
+      evts <- dyn $ do
+        ffor asList $ \l -> do
+          leftmost <$> mapM (playerWidget canStealDyn currentSelection) (zip [0..] l)
+
+      switchHold never evts
+
+    (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
+      e <- dyn (displayHand currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
+      let (a, b) = splitE e
+      a' <- switchHold never a
+      b' <- switchHold never b
+
+      pure (a', b')
+
+    let (eSelectCard, eCommandFromPlayer :: Event t KoryoCommands) = fanEither ePlayer
+
+    currentSelection <- foldDyn ($) NotSelecting $ leftmost [
+      current ((\g -> updateSelection (\pId attack -> canBeFocused (map board (players g)) pId attack)) <$> dg) <@> eSelectCard
+      , const <$> selectionEvent
+      ]
+
+    pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
+  pure events
 
 widgetBurger :: MonadWidget t m => Dynamic t Int -> m ()
 widgetBurger val = do
@@ -167,8 +292,8 @@ widgetBurger val = do
     simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
       el "div" $ el "span" $ display dValue
 
-go :: IO ()
-go = mainWidgetWithCss css $ mdo
+runUI :: IO ()
+runUI = mainWidgetWithCss css $ mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
   raw <- jsonWebSocket @KoryoCommands @Payload ("ws://" <> currentHost <> ":9160") $ def {
@@ -192,18 +317,18 @@ go = mainWidgetWithCss css $ mdo
 
 handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = mdo
-  currentSelection <- foldDyn (\m' m -> Map.filter (/=0) $ Map.unionWith (+) m m')  Map.empty (leftmost [
-                                                                              eSelect,
-                                                                              fmap negate <$> eUnselect
+  currentSelection <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  Map.empty (leftmost [
+                                                                              (, 1) <$> eSelect,
+                                                                              (\c -> (c, -1)) <$> eUnselect
                                                                               ])
 
-  currentNotSelected <- foldDyn (\m' m -> Map.filter (/=0) $ Map.unionWith (+) m m')  cards (leftmost [
-                                                                              fmap negate <$> eSelect,
-                                                                              eUnselect
+  currentNotSelected <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  cards (leftmost [
+                                                                              (\c -> (c, -1)) <$> eSelect,
+                                                                              (,1) <$> eUnselect
                                                                               ])
 
-  eSelect <- displayCards currentNotSelected
-  eUnselect <- displayCards currentSelection
+  eSelect :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
+  eUnselect :: Event t Card <- displayCards (constDyn mempty) currentSelection
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
@@ -211,8 +336,6 @@ handSelector majorityOf5 cards = mdo
           [(c, n)] -> Just $ SelectMany c n
           [(c, 1), (c', 1)] -> Just $ SelectTwo c c'
           _ -> Nothing
-
-  display validSelection
 
   let buttonStatus = ffor validSelection $ \sel -> case sel of
         Just (SelectTwo _ _)
