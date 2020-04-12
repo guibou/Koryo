@@ -21,7 +21,6 @@ import Control.Lens
 import Data.Aeson
 import GHC.Generics
 import Data.Generics.Labels()
-import Data.List (delete)
 
 data Card
   = C1_GivePrio
@@ -61,6 +60,7 @@ data Hand
   | Selected SelectedFromDraw
   | DoActions Actions
   | NothingToDo
+  | WaitingForDestroying
   deriving (Show, Generic, ToJSON, FromJSON)
 
 data Actions = Actions {
@@ -93,6 +93,9 @@ data TopLevelGame = TopLevelGame
     handles :: [Hand]
   }
   deriving (Show, Generic)
+
+nbCards :: Map Card Int -> Int
+nbCards = sum . Map.elems
 
 startGame :: Int -> TopLevelGame
 startGame seed = TopLevelGame {
@@ -294,6 +297,16 @@ nextRound game = game {
   phase = Drawing
   }
 
+destroyingPhase :: TopLevelGame -> TopLevelGame
+destroyingPhase tg = tg
+  {
+    game = (game tg) {
+      selectedPlayer = currentFirstPlayer (game tg),
+      phase = Destroying
+   },
+    handles = map (const WaitingForDestroying) (handles tg)
+   }
+
 endPlayerTurn :: TopLevelGame -> TopLevelGame
 endPlayerTurn (over #game nextPlayer . tellHimToDoNothing ->tg)
   | selectedPlayer (game tg) /= currentFirstPlayer (game tg) =
@@ -307,10 +320,7 @@ endPlayerTurn (over #game nextPlayer . tellHimToDoNothing ->tg)
         handles = set (ix (selectedPlayer (game tg))) (DoActions actions) (handles tg)
         }
     in newGame
-  | otherwise = drawPhase (tg {
-                              game = nextRound (game tg)
-                              })
-
+  | otherwise = destroyingPhase tg
 
 areAllSelected :: [Hand] -> Maybe [SelectedFromDraw]
 areAllSelected [] = Just []
@@ -360,7 +370,25 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card') =
   over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
   over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (over #flipAction (subtract 1) a)) $ tg
 
-  -- | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
+
+dropCards :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
+dropCards tg' pId cards
+  | view (#game . #selectedPlayer) tg == view (#game . #currentFirstPlayer) tg = drawPhase (tg {
+                                                                                            game = nextRound (game tg)
+                                                                                            })
+
+  | otherwise = tg
+      where
+        tg = dropCardsForPlayer tg' pId cards
+
+dropCardsForPlayer :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
+dropCardsForPlayer tg pId droppedCards =
+  -- go to next player
+  over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
+  -- set current player to nothing to do
+  set (#handles . ix pId) NothingToDo $
+  -- remove his cards
+  over (#game . #players . ix pId . #board) (flip (Map.unionWith (-)) droppedCards) $ tg
 
 -- * Random sampling primitive
 
@@ -406,6 +434,7 @@ data KoryoCommands
   | StealACoinToPlayer Int
   | FireCommand (Int, Card)
   | FlipCommand (Int, Card) (Int, Card)
+  | DropCards (Map Card Int)
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data Payload = Payload Game Hand Int
@@ -419,7 +448,7 @@ data Payload = Payload Game Hand Int
 -- Powers
 -- OK. 1: see others
 -- OK 2: (only possible with actions)
--- 3:
+-- OK3:
 -- OK. 4: (automatic during a RUN)
 -- OK. 5 (with 1): handled in UI
 -- OK 6. (automatic during a RUN?)

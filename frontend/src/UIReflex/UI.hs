@@ -11,6 +11,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 module UIReflex.UI (runUI) where
@@ -28,6 +29,8 @@ import Data.Traversable (for)
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Generics.Labels()
+import Control.Lens
 
 import Koryo
 import Assets
@@ -140,16 +143,25 @@ selectToCommand (Selecting (SelectingFlip (Just (a, Just b)))) = Just (FlipComma
 selectToCommand (Selecting (SelectingFire (Just a))) = Just (FireCommand a)
 selectToCommand _ = Nothing
 
-displayHand :: forall t m. MonadWidget t m => Dynamic t CardSelectionMode -> (Card -> Bool) -> Hand -> m (Event t CardSelectionMode, Event t KoryoCommands)
-displayHand _ _ NothingToDo = text "Wait until it is your turn" >> pure (never, never)
-displayHand _ majoritySelector (Draw m) = do
+displayHand :: forall t m. MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t CardSelectionMode -> (Card -> Bool) -> Hand -> m (Event t CardSelectionMode, Event t KoryoCommands)
+displayHand _ _ _ _ NothingToDo = text "Wait until it is your turn" >> pure (never, never)
+displayHand dGame dCurrentPlayerId _ _ WaitingForDestroying = do
+  text "DestroyingPhase"
+
+  eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
+
+  eDestroyS <- switchHold never eDestroy
+
+  pure (never, eDestroyS)
+
+displayHand _ _ _ majoritySelector (Draw m) = do
   e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
   pure (never, SelectHand <$> e)
-displayHand _ _ (Selected sel) = do
+displayHand _ _ _ _ (Selected sel) = do
   text "You selected some cards. Wait until it is your turn to play"
   void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
   pure (never, never)
-displayHand currentSelection majoritySelector (DoActions actions) = do
+displayHand _ _ currentSelection majoritySelector (DoActions actions) = do
   let
     simpleText t = text t >> pure (never, never)
     btn t enabled event = do
@@ -277,7 +289,7 @@ widgetGame dPayload = mdo
       switchHold never evts
 
     (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
-      e <- dyn (displayHand currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
+      e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
       let (a, b) = splitE e
       a' <- switchHold never a
       b' <- switchHold never b
@@ -323,8 +335,7 @@ runUI = mainWidgetWithCss css $ mdo
 
   pure ()
 
-handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
-handSelector majorityOf5 cards = mdo
+cardPicker cards pred = mdo
   currentSelection <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  Map.empty (leftmost [
                                                                               (, 1) <$> eSelect,
                                                                               (\c -> (c, -1)) <$> eUnselect
@@ -335,8 +346,16 @@ handSelector majorityOf5 cards = mdo
                                                                               (,1) <$> eUnselect
                                                                               ])
 
-  eSelect :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
+  eSelectNotFiltered :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
+  let eSelect = ffilter pred eSelectNotFiltered
+  text "<->"
   eUnselect :: Event t Card <- displayCards (constDyn mempty) currentSelection
+
+  pure (currentSelection, currentNotSelected)
+
+handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
+handSelector majorityOf5 cards = mdo
+  (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
@@ -351,7 +370,40 @@ handSelector majorityOf5 cards = mdo
         Just (SelectMany _ _) -> mempty
         _ -> "disabled" =: "disabled"
 
-  -- TODO: grey out the button
   (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
 
   pure (flip fforMaybe id $ current validSelection <@ (domEvent Click button))
+
+handDestroyor :: MonadWidget t m => Game -> Int -> m (Event t KoryoCommands)
+handDestroyor game pId
+  | selectedPlayer game /= pId = text "Wait for the other to destroy their cards" >> pure never
+  | otherwise = mdo
+  let cards = view (#players . ix pId . #board) game
+
+  let
+    currentNbCards = nbCards <$> newHand
+    newGame = flip (set (#players . ix pId . #board)) game <$> newHand
+    majorityOnNewBoard game = evaluateMajorityFor C3_SaveTwoCards (map board (players game)) == Just pId
+
+    maxCardForMe = ffor newGame $ \game ->
+      (cardsOnBoardAtRound . currentRound $ game) + bool 0 2 (majorityOnNewBoard game)
+
+  el "p" $ do
+    text "Your number of card: "
+    display currentNbCards
+  el "p" $ do
+    text "You must have no more than: "
+    display maxCardForMe
+
+  (droppedCards, newHand) <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
+
+  let
+    -- TODO: check that we cannot be blocked because too much -1
+    validSelection = (<=) <$> currentNbCards <*> maxCardForMe
+
+  let
+    buttonStatus = bool ("disabled" =: "disabled") mempty <$> validSelection
+
+  (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
+
+  pure $ (current (DropCards <$> droppedCards) <@ domEvent Click button)

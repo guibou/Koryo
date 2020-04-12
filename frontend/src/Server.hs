@@ -86,6 +86,8 @@ application stateRef pending = do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = fireCommand (Server.game state) (currentDebugClient state) c})
             FlipCommand c c' -> do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = flipCommand (Server.game state) (currentDebugClient state) c c'})
+            DropCards dp -> do
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = dropCards (Server.game state) (currentDebugClient state) dp})
 
 
         print msg
