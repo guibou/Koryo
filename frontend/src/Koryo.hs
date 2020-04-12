@@ -425,8 +425,7 @@ spec = describe "majority" $ do
 -- Commands
 
 data KoryoCommands
-  = AddPlayer String
-  | ChangePlayer Int
+  = Login String
   | SelectHand SelectedFromDraw
   | EndTurn
   | TakeCoinCommand

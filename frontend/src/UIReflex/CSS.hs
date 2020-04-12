@@ -15,16 +15,36 @@ css = (encodeUtf8 . toStrict . render) $ do
   body ? do
     backgroundColor white
 
-  ".gameStatus" ?
+  "td" ? do
+    borderColor green
+    borderWidth (px 30)
+    borderStyle solid
+
+  ".gameStatus" ? do
+    display flex
+    "p" ? do
+      borderColor black
+      borderWidth (px 1)
+      borderStyle solid
+
+  ".handle" ? do
     mempty
 
-  ".players" ? do
+  ".gameArea" ? do
     display flex
+
+  ".players" ? do
+    mempty
 
   ".players" |> div ? do
     borderColor black
     borderWidth (px 1)
     borderStyle solid
+
+  ".currentPlayer" ? do
+    borderWidth (px 1)
+    borderStyle solid
+    borderColor gold
 
   ".cards" ? do
     display flex
@@ -44,7 +64,7 @@ css = (encodeUtf8 . toStrict . render) $ do
     position relative
 
     "img" ? do
-      width (vw 9)
+      width (vw 4)
 
   ".card" ? ".burger" ? do
     pointerEvents none

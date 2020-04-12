@@ -1,48 +1,44 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# OPTIONS -Wno-orphans -Wno-missing-methods -Wno-name-shadowing#-}
 module Server where
-import Data.Text (Text)
 import Control.Monad (forM_, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar)
-import qualified Data.Text.IO as T
+import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar,takeMVar,putMVar)
 import Koryo
+import Control.Lens
+import Data.Generics.Labels()
 import Data.Aeson as Aeson
+import Data.List (find)
+import GHC.Generics
+import Control.Exception (bracket)
 
 import qualified Network.WebSockets as WS
 
-type Client = (Text, WS.Connection)
-
 data ServerState = ServerState {
-  clients :: [Client],
-  game :: TopLevelGame,
-  currentDebugClient :: Int
+  clients :: [(Int, WS.Connection)],
+  game :: TopLevelGame
   }
+  deriving (Generic)
 
 newServerState :: ServerState
-newServerState = ServerState [] (drawPhase $ topLevel { Koryo.game = addPlayer "Guillaume" $ addPlayer "Cyrielle" $ addPlayer "Mauricio" $ addPlayer "Hélène" $ Koryo.game topLevel }) 0
+newServerState = ServerState [] (drawPhase $ topLevel { Koryo.game = addPlayer "Guillaume" $ addPlayer "Cyrielle" $ addPlayer "Mauricio" $ addPlayer "Hélène" $ Koryo.game topLevel })
   where
     topLevel = startGame 0
 
 
-numClients :: ServerState -> Int
-numClients = length . clients
-
-clientExists :: Client -> ServerState -> Bool
-clientExists client = any ((== fst client) . fst) . clients
-
-addClient :: Client -> ServerState -> ServerState
-addClient client s@ServerState{clients} = s {clients = client : clients}
-
-removeClient :: Client -> ServerState -> ServerState
-removeClient client state = state {clients = filter ((/= fst client) . fst) (clients state)}
-
-broadcast :: Text -> ServerState -> IO ()
-broadcast message state = do
-    T.putStrLn message
-    forM_ (clients state) $ \(_, conn) -> WS.sendTextData conn message
+broadcastPayload :: MVar ServerState -> IO ()
+broadcastPayload stateRef = bracket (takeMVar stateRef)
+  (putMVar stateRef)
+  $ \state -> do
+    forM_ (clients state) $ \(pId, conn) -> do
+      let
+        message = Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! pId) pId
+      WS.sendTextData conn message
 
 main :: IO ()
 main = do
@@ -57,40 +53,58 @@ application stateRef pending = do
     -- WS.withPingThread conn 30 (return ()) $ do
 
     -- TODO: take disconnection into account
-    forever $ do
+    let
+      loop = do
         state <- readMVar stateRef
-        WS.sendTextData conn (Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! (min (currentDebugClient state) 3)) (currentDebugClient state))
         msg <- WS.receiveData @(Maybe KoryoCommands) conn
         case msg of
           Nothing -> putStrLn "error when decoding message"
           Just m -> case m of
-            AddPlayer _s -> putStrLn "un bolos veut jouer"
-            ChangePlayer i -> do
-              modifyMVar_ stateRef (\s -> pure $ s {currentDebugClient = i})
+            Login loginName -> case find (\(_pId, player) -> name player == loginName) $ (zip [0..] (view (#game . #game . #players) state)) of
+              Nothing -> do
+                print ("Login error with" <> loginName)
+                loop
+              Just (pId, _) -> do
+                modifyMVar_ stateRef $ \state -> do
+                  pure $ state {
+                    clients = (pId, conn):clients state
+                    }
+
+                broadcastPayload stateRef
+                mainLoop pId
+            _ -> error "You should not send any game command without login"
+
+      mainLoop pId = forever $ do
+        msg <- WS.receiveData @(Maybe KoryoCommands) conn
+        print (pId, msg)
+        case msg of
+          Nothing -> putStrLn "error when decoding message"
+          Just m -> case m of
+            Login _ -> error "WTF"
             SelectHand s -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = attemptRevealPhase $ selectCard (currentDebugClient state) s (Server.game state)})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = attemptRevealPhase $ selectCard pId s (Server.game state)})
             EndTurn -> do
               modifyMVar_ stateRef (\state ->
                                       pure $ state {
                                        Server.game = endPlayerTurn (Server.game state)
                                        })
             TakeCoinCommand -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = takeCoinInTheBank (Server.game state) (currentDebugClient state)})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = takeCoinInTheBank (Server.game state) pId})
             DestroyCardCommand -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = destroyAPersonalCard (Server.game state) (currentDebugClient state)})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = destroyAPersonalCard (Server.game state) pId})
 
             StealACoinToPlayer i -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = stealACoinToPlayer (Server.game state) (currentDebugClient state) i})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = stealACoinToPlayer (Server.game state) pId i})
 
             FireCommand c -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = fireCommand (Server.game state) (currentDebugClient state) c})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = fireCommand (Server.game state) pId c})
             FlipCommand c c' -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = flipCommand (Server.game state) (currentDebugClient state) c c'})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = flipCommand (Server.game state) pId c c'})
             DropCards dp -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = dropCards (Server.game state) (currentDebugClient state) dp})
+              modifyMVar_ stateRef (\state -> pure $ state { Server.game = dropCards (Server.game state) pId dp})
 
-
-        print msg
+        broadcastPayload stateRef
+    loop
 
 instance WS.WebSocketsData (Maybe KoryoCommands) where
   fromDataMessage (WS.Text t _) = Aeson.decode t

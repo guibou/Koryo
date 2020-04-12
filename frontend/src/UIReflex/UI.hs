@@ -60,11 +60,31 @@ projectCardSelection pId cm = Set.fromList $ map snd $ filter ((==pId).fst) $ go
       Nothing -> []
       Just v -> [v]
 
-playerWidget :: MonadWidget t m => Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
-playerWidget canStealDyn cardSelectDyn (playerNumber, player) = do
+-- TODO: there are many thing in this function which can be recovered from the Dynamic t Game
+playerWidget :: MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
+playerWidget game dCurrentPlayerId canStealDyn cardSelectDyn (playerNumber, player) = do
   (block, eStealCoin) <- el' "div" $ mdo
-    elClass "div" "name" $ dynText (Text.pack . name <$> player)
+    let
+      cls = ffor dCurrentPlayerId $ \currentPId ->
+        if currentPId == playerNumber
+        then "name currentPlayer"
+        else "name"
+
+    elDynClass "div" cls $ do
+      dynText (Text.pack . name <$> player)
+      dynText (ffor game $ \game -> if currentFirstPlayer game == playerNumber
+                                    then " - First Player"
+                                    else ""
+              )
+      dynText (ffor game $ \game -> if selectedPlayer game == playerNumber
+                                    then " - Playing"
+                                    else ""
+              )
+      dynText (ffor game $ \game ->
+                  let currentScore = computeScores (players game) !! playerNumber
+                  in [fmt| - Score: {currentScore}|])
     eStealCoin <- elClass "div" "coin" $ do
+      text "Coins: "
       display (nbCoins <$> player)
       let enabled = ffor canStealDyn $ \canSteal -> bool ("disabled" =: "disabled") mempty (canSteal playerNumber)
       (b, _) <- elDynAttr' "button" enabled (text "Steal!")
@@ -74,10 +94,7 @@ playerWidget canStealDyn cardSelectDyn (playerNumber, player) = do
     eventSelectCard <- displayCards (projectCardSelection playerNumber <$> cardSelectDyn) (board <$> player)
     pure [Right <$> eStealCoin, Left . (playerNumber,) <$> eventSelectCard]
 
-  pure $ leftmost [
-    Right <$> (ChangePlayer playerNumber <$ domEvent Click block),
-    leftmost eStealCoin
-    ]
+  pure $ leftmost eStealCoin
 
 data CardSelectionMode
   = NotSelecting
@@ -146,7 +163,7 @@ selectToCommand _ = Nothing
 displayHand :: forall t m. MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t CardSelectionMode -> (Card -> Bool) -> Hand -> m (Event t CardSelectionMode, Event t KoryoCommands)
 displayHand _ _ _ _ NothingToDo = text "Wait until it is your turn" >> pure (never, never)
 displayHand dGame dCurrentPlayerId _ _ WaitingForDestroying = do
-  text "DestroyingPhase"
+  text "Destroying Phase"
 
   eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
 
@@ -264,8 +281,6 @@ widgetGame dPayload = mdo
 
       canStealDyn = canSteal <$> dg <*> dHand <*> dCurrentPlayerId
 
-    display (phase <$> dg)
-
     elClass "div" "gameStatus" $ do
       let
         tg t f = do
@@ -273,37 +288,35 @@ widgetGame dPayload = mdo
             text t
             display (f <$> dg)
       tg "Current round: " currentRound
-      el "p" $ dynText $ (\g -> [fmt|{cardsDrawAtRound $ currentRound g:d} / {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
+      el "p" $ dynText $ (\g -> [fmt|Drawn cards: {cardsDrawAtRound $ currentRound g:d} / Cards on board: {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
       tg "Available coins: " availableCoins
-      tg "Current first player: " currentFirstPlayer
-      tg "Current player: " selectedPlayer
-      display (computeScores . players <$> dg)
 
-    (ePlayer :: _) <- elClass "div" "players" $ do
-      asList <- listDyn (players <$> dg)
+    elClass "div" "gameArea" $ mdo
+      (ePlayer :: _) <- elClass "div" "players" $ do
+        asList <- listDyn (players <$> dg)
 
-      evts <- dyn $ do
-        ffor asList $ \l -> do
-          leftmost <$> mapM (playerWidget canStealDyn currentSelection) (zip [0..] l)
+        evts <- dyn $ do
+          ffor asList $ \l -> do
+            leftmost <$> mapM (playerWidget dg dCurrentPlayerId canStealDyn currentSelection) (zip [0..] l)
 
-      switchHold never evts
+        switchHold never evts
 
-    (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
-      e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
-      let (a, b) = splitE e
-      a' <- switchHold never a
-      b' <- switchHold never b
+      (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
+        e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
+        let (a, b) = splitE e
+        a' <- switchHold never a
+        b' <- switchHold never b
 
-      pure (a', b')
+        pure (a', b')
 
-    let (eSelectCard, eCommandFromPlayer :: Event t KoryoCommands) = fanEither ePlayer
+      let (eSelectCard, eCommandFromPlayer :: Event t KoryoCommands) = fanEither ePlayer
 
-    currentSelection <- foldDyn ($) NotSelecting $ leftmost [
-      current ((\g -> updateSelection (\pId attack -> canBeFocused (map board (players g)) pId attack)) <$> dg) <@> eSelectCard
-      , const <$> selectionEvent
-      ]
+      currentSelection <- foldDyn ($) NotSelecting $ leftmost [
+        current ((\g -> updateSelection (\pId attack -> canBeFocused (map board (players g)) pId attack)) <$> dg) <@> eSelectCard
+        , const <$> selectionEvent
+        ]
 
-    pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
+      pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
   pure events
 
 widgetBurger :: MonadWidget t m => Dynamic t Int -> m ()
@@ -312,25 +325,49 @@ widgetBurger val = do
     simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
       el "div" $ el "span" $ display dValue
 
+runUIDeveloper = mainWidgetWithCss css $ do
+  el "table" $ do
+    el "tr" $ do
+      el "td" $ koryoMain (Just "Guillaume")
+      el "td" $ koryoMain (Just "Cyrielle")
+    el "tr" $ do
+      el "td" $ koryoMain (Just "Mauricio")
+      el "td" $ koryoMain (Just "Hélène")
+
 runUI :: IO ()
-runUI = mainWidgetWithCss css $ mdo
+runUI = mainWidgetWithCss css (koryoMain Nothing)
+
+koryoMain player = mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
   raw <- jsonWebSocket @KoryoCommands @Payload ("ws://" <> currentHost <> ":9160") $ def {
     _webSocketConfig_send = pure <$> sentEvt
     }
 
+  pb <- getPostBuild
+
+  let initSelectPlayer = case player of
+        Nothing -> never
+        Just pName -> (Login pName) <$ pb
+
   lastMessage <- holdDyn Nothing (_webSocket_recv raw)
   currentGame <- maybeDyn lastMessage
 
   evt <- dyn $ flip fmap currentGame $ \e -> case e of
-    Nothing -> text "Error / Not connected" >> pure never
+    Nothing -> do
+      el "p" $ text "Error / Not connected"
+      el "p" $ do
+        text "Login: "
+        t <- textInput def
+
+        pure (Login . Text.unpack <$> updated (value t))
     Just dg -> widgetGame dg
 
   eGame <- switchHold never evt
 
   let sentEvt = leftmost [
-        eGame
+        eGame,
+        initSelectPlayer
         ]
 
   pure ()
@@ -355,6 +392,7 @@ cardPicker cards pred = mdo
 
 handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = mdo
+  el "p" $ text "Select your cards"
   (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
