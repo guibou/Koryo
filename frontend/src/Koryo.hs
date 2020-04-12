@@ -426,5 +426,5 @@ data Payload = Payload Game Hand Int
 -- OK 7: (Only possible with actions)
 -- OK. 8 (with 1): handled
 -- OK. 9: handled (only for score)
--- -1 black (will work with 2)
--- -1 red (will work with 7)
+-- OK: -1 black (will work with 2)
+-- OK: -1 red (will work with 7)

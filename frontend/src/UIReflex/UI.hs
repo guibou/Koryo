@@ -163,18 +163,24 @@ displayHand currentSelection majoritySelector (DoActions actions) = do
   e <- mapM (el "div"$) $
     [
       do
-        e <- btn [fmt|Flip {flipAction actions}|] (constDyn $ (flipAction actions) /= 0) (Selecting (SelectingFlip Nothing))
-        runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
+        if flipAction actions /= 0
+        then do
+          e <- btn [fmt|Flip {flipAction actions}|] (constDyn True) (Selecting (SelectingFlip Nothing))
+          runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
                                Just (FlipCommand _ _) -> True
                                _ -> False) ()
-        pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+          pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+        else pure (never, never)
                  ,
       do
-         e <- btn [fmt|Kill {kill actions}|] (constDyn $ kill actions /= 0) (Selecting (SelectingFire Nothing))
-         runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
+         if kill actions /= 0
+           then do
+             e <- btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
+             runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
                                    Just (FireCommand _) -> True
                                    _ -> False) ()
-         pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+             pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+           else pure (never, never)
                   ,
       -- TODO: test that there are available coins
       if majoritySelector C2_Ninja && stealCoin actions
@@ -182,14 +188,16 @@ displayHand currentSelection majoritySelector (DoActions actions) = do
            else pure (never, never)
                   ,
       -- TODO: check that there is coin in the bank
-      if majoritySelector C6_Bank && takeCoin actions
-                  then simpleText "You can take a coin in the bank"
-                  else pure (never, never)
+      if takeCoin actions && majoritySelector C6_Bank
+           then do
+           e <- btn [fmt|Take a coin in the bank|] (constDyn True) TakeCoinCommand
+           pure (never, e)
+           else pure (never, never)
                   ,
       -- TODO: check that there is something to destroy
-      if destroyCard actions
+      if destroyCard actions && majoritySelector C4_KillMinusOne
            then do
-             e <- btn "DestroyCard" (constDyn $ majoritySelector C4_KillMinusOne) DestroyCardCommand
+             e <- btn "DestroyCard" (constDyn True) DestroyCardCommand
              pure (never, e)
            else pure (never, never)
                   ]
