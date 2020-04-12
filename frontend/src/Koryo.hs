@@ -335,6 +335,18 @@ destroyAPersonalCard tg playerId
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
   | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
 
+stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
+stealACoinToPlayer tg currentPlayerId otherPlayerId
+  | (nbCoins . (!! otherPlayerId) . players . game) tg > 0 =
+    over (#game . #players . ix currentPlayerId . #nbCoins) (+1) $
+    over (#game . #players . ix otherPlayerId . #nbCoins) (subtract 1) $
+    over (#handles . ix currentPlayerId) (\(DoActions l) -> DoActions (delete StealCoin l)) $ tg
+  | otherwise =
+    over (#handles . ix currentPlayerId) (\(DoActions l) -> DoActions (delete StealCoin l)) $ tg
+
+
+  -- | otherwise = over (#handles . ix playerId) (\(DoActions l) -> DoActions (delete DestroyCard l)) $ tg
+
 -- * Random sampling primitive
 
 weightedPickMap :: Map Card Int -> Int -> StdGen -> (Map Card Int, StdGen)
@@ -376,17 +388,22 @@ data KoryoCommands
   | EndTurn
   | TakeCoinCommand
   | DestroyCardCommand
+  | StealACoinToPlayer Int
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data Payload = Payload Game Hand Int
   deriving (ToJSON, FromJSON, Generic, Show)
 
 
+-- TODO: auto run
+-- Play phase: do the 4 and 6 if possible. terminate the run automatically if there is no -1 to play.
+-- Delete phase: next phase automatically if there is nothing to delete
+
 -- Powers
 -- OK. 1: see others
--- 2: (only possible with actions)
+-- OK 2: (only possible with actions)
 -- 3:
--- 4: (automatic during a RUN)
+-- OK. 4: (automatic during a RUN)
 -- OK. 5 (with 1): handled in UI
 -- OK 6. (automatic during a RUN?)
 -- OK 7: (Only possible with actions)

@@ -43,14 +43,24 @@ listDyn input = do
 
   holdUniqDynBy f newDyn
 
-playerWidget :: MonadWidget t m => (Int, Dynamic t Player) -> m (Event t KoryoCommands)
-playerWidget (playerNumber, player) = do
-  (block, _) <- el' "div" $ do
+playerWidget :: MonadWidget t m => Dynamic t (Int -> Bool) -> (Int, Dynamic t Player) -> m (Event t KoryoCommands)
+playerWidget canStealDyn (playerNumber, player) = do
+  (block, eStealCoin) <- el' "div" $ do
     elClass "div" "name" $ dynText (Text.pack . name <$> player)
-    elClass "div" "coin" $ display (nbCoins <$> player)
+    eStealCoin <- elClass "div" "coin" $ do
+      display (nbCoins <$> player)
+      let enabled = ffor canStealDyn $ \canSteal -> bool ("disabled" =: "disabled") mempty (canSteal playerNumber)
+      (b, _) <- elDynAttr' "button" enabled (text "Steal!")
+
+      pure (StealACoinToPlayer playerNumber <$ domEvent Click b)
+
 
     void $ displayCards (board <$> player)
-  pure (ChangePlayer playerNumber <$ domEvent Click block)
+    pure eStealCoin
+  pure $ leftmost [
+    ChangePlayer playerNumber <$ domEvent Click block,
+    eStealCoin
+    ]
 
 displayCards :: MonadWidget t m => Dynamic t (Map Card Int) -> m (Event t (Map Card Int))
 displayCards cards = do
@@ -107,6 +117,19 @@ widgetGame dPayload = do
   let dg = (\(Payload g _ _) -> g) <$> dPayload
   let dHand = (\(Payload _ h _) -> h) <$> dPayload
   let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dPayload
+  let
+    canSteal game currentPlayerHand currentPlayerId otherPlayerId =
+      -- enough coins for p1
+      nbCoins (players (game) !! otherPlayerId) > 0
+      -- Have the ninja for current player
+        && evaluateMajorityFor C2_Ninja (map board (players game)) == Just currentPlayerId
+        --  have a Steal command
+        && case currentPlayerHand of
+            DoActions l ->  StealCoin `elem` l
+            _ -> False
+        && currentPlayerId /= otherPlayerId
+
+    canStealDyn = canSteal <$> dg <*> dHand <*> dCurrentPlayerId
 
   display (phase <$> dg)
 
@@ -128,7 +151,7 @@ widgetGame dPayload = do
 
     evts <- dyn $ do
       ffor asList $ \l -> do
-        leftmost <$> mapM playerWidget (zip [0..] l)
+        leftmost <$> mapM (playerWidget canStealDyn) (zip [0..] l)
 
     switchHold never evts
 
