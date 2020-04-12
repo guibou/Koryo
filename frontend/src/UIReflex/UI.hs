@@ -340,7 +340,7 @@ runUI = mainWidgetWithCss css (koryoMain Nothing)
 koryoMain player = mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
-  raw <- jsonWebSocket @KoryoCommands @Payload ("ws://" <> currentHost <> ":9160") $ def {
+  raw <- jsonWebSocket @RemoteCommand @Payload ("ws://" <> currentHost <> ":9160") $ def {
     _webSocketConfig_send = pure <$> sentEvt
     }
 
@@ -361,7 +361,10 @@ koryoMain player = mdo
         t <- textInput def
 
         pure (Login . Text.unpack <$> updated (value t))
-    Just dg -> widgetGame dg
+    Just dg -> do
+      let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dg
+      koryoCommand <- widgetGame dg
+      pure $ (current (GameCommand <$> dCurrentPlayerId) <@> koryoCommand)
 
   eGame <- switchHold never evt
 

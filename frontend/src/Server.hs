@@ -5,18 +5,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedLabels #-}
-{-# OPTIONS -Wno-orphans -Wno-missing-methods -Wno-name-shadowing#-}
+{-# OPTIONS -Wno-orphans -Wno-missing-methods#-}
 module Server where
-import Control.Monad (forM_, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar,takeMVar,putMVar)
+import Control.Monad (forM, forever)
+import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar,takeMVar,putMVar,modifyMVar,withMVar)
 import Koryo
 import Control.Lens
 import Data.Generics.Labels()
 import Data.Aeson as Aeson
 import Data.List (find)
 import GHC.Generics
-import Control.Exception (bracket, try,SomeException)
 import Control.Monad (void)
+import Control.Exception (try, SomeException)
+import GHC.Stack
+import Data.Maybe (catMaybes)
 
 import qualified Network.WebSockets as WS
 
@@ -33,13 +35,24 @@ newServerState = ServerState [] (drawPhase $ topLevel { Koryo.game = addPlayer "
 
 
 broadcastPayload :: MVar ServerState -> IO ()
-broadcastPayload stateRef = bracket (takeMVar stateRef)
-  (putMVar stateRef)
+broadcastPayload stateRef = modifyMVar_ stateRef
   $ \state -> do
-    forM_ (clients state) $ \(pId, conn) -> do
+    print ("--------")
+    print (length (clients state))
+
+    newClients <- forM (clients state) $ \(pId, conn) -> do
       let
         message = Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! pId) pId
       void $ try @SomeException $ WS.sendTextData conn message
+      res <- try @SomeException $ WS.sendTextData conn message
+
+      case res of
+        Right () -> pure $ Just (pId, conn)
+        Left e -> do
+          print ("error sending to", pId, res)
+          pure $ Nothing
+
+    pure $ state { clients = catMaybes newClients }
 
 main :: IO ()
 main = do
@@ -53,35 +66,25 @@ application stateRef pending = do
     WS.forkPingThread conn 30
     -- WS.withPingThread conn 30 (return ()) $ do
 
-    -- TODO: take disconnection into account
     let
-      loop = do
-        state <- readMVar stateRef
-        msg <- WS.receiveData @(Maybe KoryoCommands) conn
+      loop :: IO ()
+      loop = forever $ do
+        msg <- WS.receiveData @(Maybe RemoteCommand) conn
+        print msg
         case msg of
           Nothing -> putStrLn "error when decoding message"
-          Just m -> case m of
-            Login loginName -> case find (\(_pId, player) -> name player == loginName) $ (zip [0..] (view (#game . #game . #players) state)) of
+          Just (Login loginName) -> do
+            statee <- readMVar stateRef
+            case find (\(_pId, player) -> name player == loginName) $ (zip [0..] (view (#game . #game . #players) statee)) of
               Nothing -> do
                 print ("Login error with" <> loginName)
-                loop
               Just (pId, _) -> do
+                print ("Logged", (pId, loginName))
                 modifyMVar_ stateRef $ \state -> do
                   pure $ state {
                     clients = (pId, conn):clients state
                     }
-
-                broadcastPayload stateRef
-                mainLoop pId
-            _ -> error "You should not send any game command without login"
-
-      mainLoop pId = forever $ do
-        msg <- WS.receiveData @(Maybe KoryoCommands) conn
-        print (pId, msg)
-        case msg of
-          Nothing -> putStrLn "error when decoding message"
-          Just m -> case m of
-            Login _ -> error "WTF"
+          Just (GameCommand pId command) -> case command of
             SelectHand s -> do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = attemptRevealPhase $ selectCard pId s (Server.game state)})
             EndTurn -> do
@@ -105,9 +108,10 @@ application stateRef pending = do
               modifyMVar_ stateRef (\state -> pure $ state { Server.game = dropCards (Server.game state) pId dp})
 
         broadcastPayload stateRef
-    loop
+    t <- try @SomeException $ loop
+    print ("Unexpected end of the loop", t)
 
-instance WS.WebSocketsData (Maybe KoryoCommands) where
+instance WS.WebSocketsData (Maybe RemoteCommand) where
   fromDataMessage (WS.Text t _) = Aeson.decode t
   fromDataMessage (WS.Binary _) = error "WTF"
 

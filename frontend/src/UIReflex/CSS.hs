@@ -64,7 +64,7 @@ css = (encodeUtf8 . toStrict . render) $ do
     position relative
 
     "img" ? do
-      width (vw 4)
+      width (vw 6)
 
   ".card" ? ".burger" ? do
     pointerEvents none

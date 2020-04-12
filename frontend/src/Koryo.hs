@@ -425,8 +425,7 @@ spec = describe "majority" $ do
 -- Commands
 
 data KoryoCommands
-  = Login String
-  | SelectHand SelectedFromDraw
+  = SelectHand SelectedFromDraw
   | EndTurn
   | TakeCoinCommand
   | DestroyCardCommand
@@ -434,6 +433,11 @@ data KoryoCommands
   | FireCommand (Int, Card)
   | FlipCommand (Int, Card) (Int, Card)
   | DropCards (Map Card Int)
+  deriving (ToJSON, FromJSON, Generic, Show)
+
+data RemoteCommand
+  = Login String
+  | GameCommand Int KoryoCommands
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data Payload = Payload Game Hand Int
