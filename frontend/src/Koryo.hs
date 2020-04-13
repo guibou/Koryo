@@ -97,8 +97,8 @@ data TopLevelGame = TopLevelGame
 nbCards :: Map Card Int -> Int
 nbCards = sum . Map.elems
 
-startGame :: Int -> TopLevelGame
-startGame seed = TopLevelGame {
+startGame :: StdGen -> TopLevelGame
+startGame gen = TopLevelGame {
   game = Game {
       players = [],
       currentRound = 1,
@@ -108,7 +108,7 @@ startGame seed = TopLevelGame {
       phase = Drawing
       },
     handles = [],
-    randomGenerator = mkStdGen seed
+    randomGenerator = gen
   }
 
 {-

@@ -16,6 +16,7 @@ import Data.List (find)
 import GHC.Generics
 import Control.Exception (try, SomeException)
 import Data.Maybe (catMaybes)
+import System.Random
 
 import qualified Network.WebSockets as WS
 
@@ -25,10 +26,10 @@ data ServerState = ServerState {
   }
   deriving (Generic)
 
-newServerState :: ServerState
-newServerState = ServerState [] (drawPhase $ topLevel { Koryo.game = addPlayer "Guillaume" $ addPlayer "Cyrielle" $ addPlayer "Mauricio" $ addPlayer "Hélène" $ Koryo.game topLevel })
-  where
-    topLevel = startGame 0
+newServerState :: [String] -> StdGen -> ServerState
+newServerState players gen = ServerState [] (drawPhase $
+                                             over #game (flip (foldr addPlayer) players) (startGame gen)
+                                            )
 
 
 broadcastPayload :: MVar ServerState -> IO ()
@@ -50,10 +51,11 @@ broadcastPayload stateRef = modifyMVar_ stateRef
 
     pure $ state { clients = catMaybes newClients }
 
-main :: IO ()
-main = do
-    state <- newMVar newServerState
-    WS.runServer "0.0.0.0" 9160 $ application state
+startServer :: [String] -> IO ()
+startServer players = do
+  gen <- newStdGen
+  state <- newMVar (newServerState players gen)
+  WS.runServer "0.0.0.0" 9160 $ application state
 
 application :: MVar ServerState -> WS.ServerApp
 application stateRef pending = do
