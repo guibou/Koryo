@@ -73,6 +73,9 @@ css = (encodeUtf8 . toStrict . render) $ do
     "img" ? do
       width (vw 6)
 
+  ".card" ? do
+    animation "appear" (sec 1) linear (sec 0) normal alternate forwards
+
   ".card" ? ".burger" ? do
     pointerEvents none
     position absolute
@@ -101,3 +104,42 @@ css = (encodeUtf8 . toStrict . render) $ do
     (0, color black),
     (100, color red)
     ]
+
+  keyframes "appear" [
+    (0, opacity 0),
+    (100, opacity 100)
+    ]
+
+  ".help" ? do
+    ".marker" ? do
+      backgroundColor purple
+      borderColor darkviolet
+      color white
+      position absolute
+      bottom (px 0)
+      right (px 0)
+      borderWidth (px 3)
+      borderRadius (px 5) (px 5) (px 5) (px 5)
+      padding (px 0) (px 5) (px 0) (px 5)
+      margin (px 2) (px 0) (px 2) (px 0)
+    ".description" ? do
+      opacity 0
+      position absolute
+      bottom (px 0)
+      right (px 0)
+      pointerEvents none
+
+  ".help:active" ? do
+    ".description" ? do
+      userSelect none
+      opacity 100
+
+      zIndex 2
+      top (px 0)
+      right (px 0)
+      borderWidth (px 3)
+      borderRadius (px 5) (px 5) (px 5) (px 5)
+      padding (px 0) (px 5) (px 0) (px 5)
+      margin (px 2) (px 0) (px 2) (px 0)
+      backgroundColor purple
+      color white

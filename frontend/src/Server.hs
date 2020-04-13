@@ -61,7 +61,9 @@ application :: MVar ServerState -> WS.ServerApp
 application stateRef pending = do
     conn <- WS.acceptRequest pending
     putStrLn "Connection accepted"
-    WS.forkPingThread conn 30
+    -- Disable ping thread for now, I don't know if that's useful
+    -- Player can reload the game if needed
+    -- WS.forkPingThread conn 30
     -- WS.withPingThread conn 30 (return ()) $ do
 
     let

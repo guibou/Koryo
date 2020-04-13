@@ -32,6 +32,7 @@ import Data.Generics.Labels()
 import Control.Lens
 
 import Koryo
+import Data.Text (Text)
 import Assets
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -145,6 +146,9 @@ displayCards selectedCards cards = do
                              ("src", "data:image/png;base64," <> (decodeUtf8 t))
                                --("width", "100")
                              ]) $ pure ()
+            elClass "div" "help" $ do
+              elClass "div" "description" $ text $ description card
+              elClass "div" "marker" $ text "?"
             let cardClick = domEvent Click e
             pure $ cardClick
         widgetBurger dCount
@@ -153,6 +157,20 @@ displayCards selectedCards cards = do
   pure $ ffor (Map.keys <$> selectCardEvent) $ \l -> case l of
     [c] -> c
     _ -> error "Too many card selected at once. That's impossible"
+
+description :: Card -> Text
+description = \case
+  C1_GivePrio -> "Résoud les égalités"
+  C2_Ninja -> "Voler une pièce. Protège contre les échanges si pas de 7."
+  C3_SaveTwoCards -> "Garde 2 cartes de plus."
+  C4_KillMinusOne -> "Detruit un -1."
+  C5_TakeTwoDifferent -> "Pioche deux cartes differentes."
+  C6_Bank -> "Pioche une pièce"
+  C7_Warrior -> "Protège contre les -1 rouges."
+  C8_DrawTwoMore -> "Pioche une carte de plus."
+  C9_DoNothing -> "Rapporte des points."
+  Cm1_FlipTwo -> "Echange deux cartes ciblées si non protegées par le 2."
+  Cm1_KillOne -> "Detruit une carte ciblée si non protegée par le 7."
 
 selectToCommand :: CardSelectionMode -> Maybe KoryoCommands
 selectToCommand (Selecting (SelectingFlip (Just (a, Just b)))) = Just (FlipCommand a b)
