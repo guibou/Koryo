@@ -4,16 +4,16 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# OPTIONS -Wno-orphans -Wno-missing-methods #-}
 module Server where
 import Control.Monad (forM, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar)
+import Control.Concurrent (MVar, newMVar, modifyMVar_)
 import Koryo
 import Control.Lens
 import Data.Generics.Labels()
 import Data.Aeson as Aeson
 import Data.List (find)
 import GHC.Generics
-import Control.Monad (void)
 import Control.Exception (try, SomeException)
 import Data.Maybe (catMaybes)
 
@@ -40,7 +40,6 @@ broadcastPayload stateRef = modifyMVar_ stateRef
     newClients <- forM (clients state) $ \(pId, conn) -> do
       let
         message = Payload (Koryo.game (Server.game state)) (Koryo.handles (Server.game state) !! pId) pId
-      void $ try @SomeException $ WS.sendTextData conn message
       res <- try @SomeException $ WS.sendTextData conn message
 
       case res of
@@ -72,17 +71,14 @@ application stateRef pending = do
         print msg
         case msg of
           Nothing -> putStrLn "error when decoding message"
-          Just (Login loginName) -> do
-            statee <- readMVar stateRef
-            case find (\(_pId, player) -> name player == loginName) $ (zip [0..] (view (#game . #game . #players) statee)) of
+          Just (Login loginName) -> modifyMVar_ stateRef $ \state -> do
+            case find (\(_pId, player) -> name player == loginName) $ (zip [0..] (view (#game . #game . #players) state)) of
               Nothing -> do
                 print ("Login error with" <> loginName)
+                pure state
               Just (pId, _) -> do
                 print ("Logged", (pId, loginName))
-                modifyMVar_ stateRef $ \state -> do
-                  pure $ state {
-                    clients = (pId, conn):clients state
-                    }
+                pure $ over #clients ((pId, conn):) state
           Just (GameCommand pId command) -> case command of
             SelectHand s -> modifyGame $ \game -> attemptRevealPhase $ selectCard pId s game
             EndTurn -> modifyGame $ \game -> endPlayerTurn game
