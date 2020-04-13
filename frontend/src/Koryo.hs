@@ -255,8 +255,6 @@ revealPlayer handle player = let
      board = Map.unionWith (+) (board player) newCards
      }, actions)
 
--- TODO: the powers! (And user interaction!)
-
 {-
    - Each player destroy card, if needed (power 3)
 C) End of game
@@ -335,40 +333,40 @@ takeCoinInTheBank :: TopLevelGame -> Int -> TopLevelGame
 takeCoinInTheBank tg playerId
   | availableCoins (game tg) == 0 = tg
   | otherwise = over (#game . #players . ix playerId . #nbCoins) (+1) $
-                over (#handles . ix playerId) (\(DoActions a) -> DoActions $ a { takeCoin = False }) $
+                set (#handles . ix playerId . #_DoActions . #takeCoin) False $
                 over (#game . #availableCoins) (subtract 1) tg
 
 destroyAPersonalCard :: TopLevelGame -> Int -> TopLevelGame
 destroyAPersonalCard tg playerId
   | Just n <- Map.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
-  , n > 0 = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False })) $
+  , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_KillOne (n - 1)) $ tg
   | Just n <- Map.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
-  , n > 0 = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False })) $
+  , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
-  | otherwise = over (#handles . ix playerId) (\(DoActions a) -> DoActions (a { destroyCard = False})) $ tg
+  | otherwise = set (#handles . ix playerId . #_DoActions . #destroyCard) False tg
 
 stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
 stealACoinToPlayer tg currentPlayerId otherPlayerId
   | (nbCoins . (!! otherPlayerId) . players . game) tg > 0 =
     over (#game . #players . ix currentPlayerId . #nbCoins) (+1) $
     over (#game . #players . ix otherPlayerId . #nbCoins) (subtract 1) $
-    over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (a { stealCoin = False })) $ tg
+    set (#handles . ix currentPlayerId . #_DoActions . #stealCoin) False $ tg
   | otherwise =
-    over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (a { stealCoin = False })) $ tg
+    set (#handles . ix currentPlayerId . #_DoActions . #stealCoin) False $ tg
 
 fireCommand :: TopLevelGame -> Int -> (Int, Card) -> TopLevelGame
 fireCommand tg currentPlayerId (targetId, card) =
   -- TODO: do some check
   over (#game . #players . ix targetId . #board) (Map.insertWith (+) card (-1)) $
-  over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (over #kill (subtract 1) a)) $ tg
+  over (#handles . ix currentPlayerId . #_DoActions . #kill) (subtract 1) $ tg
 
 flipCommand :: TopLevelGame -> Int -> (Int, Card) -> (Int, Card) -> TopLevelGame
 flipCommand tg currentPlayerId (targetId, card) (targetId', card') =
   -- TODO: do some check
   over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromList [(card, (-1)), (card', 1)])) $
   over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
-  over (#handles . ix currentPlayerId) (\(DoActions a) -> DoActions (over #flipAction (subtract 1) a)) $ tg
+  over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
 
 
 dropCards :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
