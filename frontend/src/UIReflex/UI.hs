@@ -61,24 +61,23 @@ projectCardSelection pId cm = Set.fromList $ map snd $ filter ((==pId).fst) $ go
       Just v -> [v]
 
 -- TODO: there are many thing in this function which can be recovered from the Dynamic t Game
-playerWidget :: MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
-playerWidget game dCurrentPlayerId canStealDyn cardSelectDyn (playerNumber, player) = do
+playerWidget :: MonadWidget t m => Dynamic t Game -> Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
+playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
   (_, eStealCoin) <- el' "div" $ mdo
     let
-      cls = ffor dCurrentPlayerId $ \currentPId ->
-        if currentPId == playerNumber
-        then "name currentPlayer"
-        else "name"
-
-    elDynClass "div" cls $ do
+    elClass "div" "name" $ do
       dynText (Text.pack . name <$> player)
-      dynText (ffor game $ \game -> if currentFirstPlayer game == playerNumber
-                                    then " - First Player"
-                                    else ""
+      dyn_ (ffor game $ \game -> if currentFirstPlayer game == playerNumber
+                                then do
+               text " - "
+               elClass "span" "firstPlayer" $ text "First Player"
+                                else blank
               )
-      dynText (ffor game $ \game -> if selectedPlayer game == playerNumber
-                                    then " - Playing"
-                                    else ""
+      dyn_ (ffor game $ \game -> if selectedPlayer game == playerNumber
+                                    then do
+               text " - "
+               elClass "span" "currentPlayer" $ text "Current Player"
+                                    else blank
               )
       dynText (ffor game $ \game ->
                   let currentScore = computeScores (players game) !! playerNumber
@@ -303,11 +302,16 @@ widgetGame dPayload = mdo
         asList <- listDyn (players <$> dg)
 
         evts <- dyn $ do
-          ffor asList $ \l -> do
-            leftmost <$> mapM (playerWidget dg dCurrentPlayerId canStealDyn currentSelection) (zip [0..] l)
+          ffor ((,) <$> asList <*> dCurrentPlayerId) $ \(l, currentPlayerId) -> do
+            let
+              listWithPlayerIdx = zip [0..] l
+
+              -- permutation up to the next player
+              newList = drop currentPlayerId listWithPlayerIdx <> take currentPlayerId listWithPlayerIdx
+
+            leftmost <$> mapM (playerWidget dg canStealDyn currentSelection) newList
 
         switchHold never evts
-
 
       (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
         e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> dBoard <*> dCurrentPlayerId)) <*> dHand)
@@ -468,7 +472,7 @@ TODOs:
 Issues noted by my wife:
 
 - personal board is too small with respect to others
-- personal board must be on top
+OK - personal board must be on top
 - seeing which player is playing should be obvious
 - french translation
 - more UI feedback:
@@ -480,6 +484,12 @@ My TODO:
 
 - tests ;)
 - more robust server
-- do not redisplay everything when the board change. Especially during
+- automatic actions
+DONE - do not redisplay everything when the board change. Especially during
   the draw phase. That's annoying!
+
+GAME FEATURES:
+- see the number of card drawn by others
+-
+
 -}

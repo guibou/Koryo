@@ -36,15 +36,22 @@ css = (encodeUtf8 . toStrict . render) $ do
   ".players" ? do
     mempty
 
+  ".firstPlayer" ? do
+    color gold
+
+  ".currentPlayer" ? do
+    color red
+
+  ".players" |> "div:first-child" ? do
+    marginBottom (vh 5)
+    borderColor green
+    borderWidth (px 5)
+    borderStyle solid
+
   ".players" |> div ? do
     borderColor black
     borderWidth (px 1)
     borderStyle solid
-
-  ".currentPlayer" ? do
-    borderWidth (px 1)
-    borderStyle solid
-    borderColor gold
 
   ".cards" ? do
     display flex

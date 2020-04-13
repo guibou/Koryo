@@ -192,7 +192,7 @@ drawPhase TopLevelGame{game, randomGenerator} = let
   playerBoards = map board (players game)
   playerWithMajorityFor8 = evaluateMajorityFor C8_DrawTwoMore playerBoards
 
-  cardsToDraw = map (\p -> cardsDrawAtRound (currentRound game) + bool 0 2 (Just p == playerWithMajorityFor8)) [0 .. length (players game) - 1]
+  cardsToDraw = map (\p -> cardsDrawAtRound (currentRound game) + bool 0 1 (Just p == playerWithMajorityFor8)) [0 .. length (players game) - 1]
 
   (newGen, newHands, _newAvailableCards) = foldr drawCards (randomGenerator, [], availableCards game) cardsToDraw
 
