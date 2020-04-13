@@ -45,7 +45,7 @@ allCards = Map.fromList (zip enumerated ([1..9] ++ [6, 4]))
 data SelectedFromDraw
   = SelectMany Card Int
   | SelectTwo Card Card
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Player = Player
   {
@@ -53,7 +53,7 @@ data Player = Player
     board :: Map Card Int,
     nbCoins :: Int
   }
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Hand
   = Draw (Map Card Int)
@@ -61,7 +61,7 @@ data Hand
   | DoActions Actions
   | NothingToDo
   | WaitingForDestroying
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Actions = Actions {
   flipAction :: Int, -- Action of the black -1. Must select
@@ -81,10 +81,10 @@ data Game = Game
     selectedPlayer :: Int,
     phase :: Phase
    }
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Phase = Drawing | Playing | Destroying
-  deriving (Show, Generic, ToJSON, FromJSON)
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data TopLevelGame = TopLevelGame
   {

@@ -264,9 +264,11 @@ widgetGame dPayload = mdo
                                               Selecting (SelectingFire _) -> "selecting-fire"
                                               Selecting (SelectingFlip _) -> "selecting-flip"
                                               ) $ mdo
-    let dg = (\(Payload g _ _) -> g) <$> dPayload
-    let dHand = (\(Payload _ h _) -> h) <$> dPayload
-    let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dPayload
+    dg <- holdUniqDyn ((\(Payload g _ _) -> g) <$> dPayload)
+    dHand <- holdUniqDyn ((\(Payload _ h _) -> h) <$> dPayload)
+    dCurrentPlayerId <- holdUniqDyn ((\(Payload _ _ i) -> i) <$> dPayload)
+    dBoard <- holdUniqDyn (map board . players <$> dg)
+
     let
       canSteal game currentPlayerHand currentPlayerId otherPlayerId =
         -- enough coins for p1
@@ -301,8 +303,9 @@ widgetGame dPayload = mdo
 
         switchHold never evts
 
+
       (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
-        e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c . map board . players) p == Just pID)) <$> ((,) <$> dg <*> dCurrentPlayerId)) <*> dHand)
+        e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> dBoard <*> dCurrentPlayerId)) <*> dHand)
         let (a, b) = splitE e
         a' <- switchHold never a
         b' <- switchHold never b
