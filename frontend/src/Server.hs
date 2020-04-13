@@ -2,13 +2,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedLabels #-}
-{-# OPTIONS -Wno-orphans -Wno-missing-methods#-}
 module Server where
 import Control.Monad (forM, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar,takeMVar,putMVar,modifyMVar,withMVar)
+import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar)
 import Koryo
 import Control.Lens
 import Data.Generics.Labels()
@@ -17,7 +15,6 @@ import Data.List (find)
 import GHC.Generics
 import Control.Monad (void)
 import Control.Exception (try, SomeException)
-import GHC.Stack
 import Data.Maybe (catMaybes)
 
 import qualified Network.WebSockets as WS
@@ -37,7 +34,7 @@ newServerState = ServerState [] (drawPhase $ topLevel { Koryo.game = addPlayer "
 broadcastPayload :: MVar ServerState -> IO ()
 broadcastPayload stateRef = modifyMVar_ stateRef
   $ \state -> do
-    print ("--------")
+    putStrLn ("--------")
     print (length (clients state))
 
     newClients <- forM (clients state) $ \(pId, conn) -> do
@@ -49,7 +46,7 @@ broadcastPayload stateRef = modifyMVar_ stateRef
       case res of
         Right () -> pure $ Just (pId, conn)
         Left e -> do
-          print ("error sending to", pId, res)
+          print ("error sending to", pId, res, e)
           pure $ Nothing
 
     pure $ state { clients = catMaybes newClients }
@@ -67,6 +64,8 @@ application stateRef pending = do
     -- WS.withPingThread conn 30 (return ()) $ do
 
     let
+      modifyGame f = modifyMVar_ stateRef $ \state -> pure (over #game f state)
+
       loop :: IO ()
       loop = forever $ do
         msg <- WS.receiveData @(Maybe RemoteCommand) conn
@@ -85,29 +84,17 @@ application stateRef pending = do
                     clients = (pId, conn):clients state
                     }
           Just (GameCommand pId command) -> case command of
-            SelectHand s -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = attemptRevealPhase $ selectCard pId s (Server.game state)})
-            EndTurn -> do
-              modifyMVar_ stateRef (\state ->
-                                      pure $ state {
-                                       Server.game = endPlayerTurn (Server.game state)
-                                       })
-            TakeCoinCommand -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = takeCoinInTheBank (Server.game state) pId})
-            DestroyCardCommand -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = destroyAPersonalCard (Server.game state) pId})
-
-            StealACoinToPlayer i -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = stealACoinToPlayer (Server.game state) pId i})
-
-            FireCommand c -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = fireCommand (Server.game state) pId c})
-            FlipCommand c c' -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = flipCommand (Server.game state) pId c c'})
-            DropCards dp -> do
-              modifyMVar_ stateRef (\state -> pure $ state { Server.game = dropCards (Server.game state) pId dp})
+            SelectHand s -> modifyGame $ \game -> attemptRevealPhase $ selectCard pId s game
+            EndTurn -> modifyGame $ \game -> endPlayerTurn game
+            TakeCoinCommand -> modifyGame $ \game -> takeCoinInTheBank game pId
+            DestroyCardCommand -> modifyGame $ \game -> destroyAPersonalCard game pId
+            StealACoinToPlayer i -> modifyGame $ \game -> stealACoinToPlayer game pId i
+            FireCommand c -> modifyGame $ \game -> fireCommand game pId c
+            FlipCommand c c' -> modifyGame $ \game -> flipCommand game pId c c'
+            DropCards dp -> modifyGame $ \game -> dropCards game pId dp
 
         broadcastPayload stateRef
+
     t <- try @SomeException $ loop
     print ("Unexpected end of the loop", t)
 
