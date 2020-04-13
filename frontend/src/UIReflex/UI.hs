@@ -160,95 +160,100 @@ selectToCommand (Selecting (SelectingFlip (Just (a, Just b)))) = Just (FlipComma
 selectToCommand (Selecting (SelectingFire (Just a))) = Just (FireCommand a)
 selectToCommand _ = Nothing
 
-displayHand :: forall t m. MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t CardSelectionMode -> (Card -> Bool) -> Hand -> m (Event t CardSelectionMode, Event t KoryoCommands)
-displayHand _ _ _ _ NothingToDo = text "Wait until it is your turn" >> pure (never, never)
-displayHand dGame dCurrentPlayerId _ _ WaitingForDestroying = do
-  text "Destroying Phase"
+displayHand :: forall t m. MonadWidget t m
+            => Dynamic t Game
+            -> Dynamic t Int
+            -> Dynamic t CardSelectionMode
+            -> (Card -> Bool)
+            -> Hand
+            -> m (Event t CardSelectionMode, Event t KoryoCommands)
+displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
+  NothingToDo -> text "Wait until it is your turn" >> pure (never, never)
+  WaitingForDestroying -> do
+    text "Destroying Phase"
 
-  eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
+    eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
+    eDestroyS <- switchHold never eDestroy
 
-  eDestroyS <- switchHold never eDestroy
+    pure (never, eDestroyS)
+  Draw m -> do
+    e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
+    pure (never, SelectHand <$> e)
+  Selected sel -> do
+    text "You selected some cards. Wait until it is your turn to play"
+    void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
+    pure (never, never)
+  DoActions actions -> do
+    let
+      simpleText t = text t >> pure (never, never)
+      btn t enabled event = do
+        (b, _) <- elDynAttr' "button" (bool ("disabled" =: "disabled") mempty <$> enabled) $ text t
 
-  pure (never, eDestroyS)
+        pure (event <$ (domEvent Click b))
 
-displayHand _ _ _ majoritySelector (Draw m) = do
-  e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
-  pure (never, SelectHand <$> e)
-displayHand _ _ _ _ (Selected sel) = do
-  text "You selected some cards. Wait until it is your turn to play"
-  void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
-  pure (never, never)
-displayHand _ _ currentSelection majoritySelector (DoActions actions) = do
-  let
-    simpleText t = text t >> pure (never, never)
-    btn t enabled event = do
-      (b, _) <- elDynAttr' "button" (bool ("disabled" =: "disabled") mempty <$> enabled) $ text t
+      selectCommand = selectToCommand <$> dCurrentSelection
 
-      pure (event <$ (domEvent Click b))
-
-    selectCommand = selectToCommand <$> currentSelection
-
-    -- TODO: check that some action can be done
-  e <- mapM (el "div"$) $
-    [
-      do
-        if flipAction actions /= 0
-        then do
-          e <- btn [fmt|Flip {flipAction actions}|] (constDyn True) (Selecting (SelectingFlip Nothing))
-          runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
-                               Just (FlipCommand _ _) -> True
-                               _ -> False) ()
-          pure (e, fmapMaybe id (current selectCommand <@ runCommand))
-        else pure (never, never)
-                 ,
-      do
-         if kill actions /= 0
-           then do
-             e <- btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
-             runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
-                                   Just (FireCommand _) -> True
-                                   _ -> False) ()
-             pure (e, fmapMaybe id (current selectCommand <@ runCommand))
-           else pure (never, never)
-                  ,
-      -- TODO: test that there are available coins
-      if majoritySelector C2_Ninja && stealCoin actions
-           then simpleText "You can steal a coin to someone"
-           else pure (never, never)
-                  ,
-      -- TODO: check that there is coin in the bank
-      if takeCoin actions && majoritySelector C6_Bank
-           then do
-           e <- btn [fmt|Take a coin in the bank|] (constDyn True) TakeCoinCommand
-           pure (never, e)
-           else pure (never, never)
-                  ,
-      -- TODO: check that there is something to destroy
-      if destroyCard actions && majoritySelector C4_KillMinusOne
-           then do
-             e <- btn "DestroyCard" (constDyn True) DestroyCardCommand
+      -- TODO: check that some action can be done
+    e <- mapM (el "div"$) $
+      [
+        do
+          if flipAction actions /= 0
+          then do
+            e <- btn [fmt|Flip {flipAction actions}|] (constDyn True) (Selecting (SelectingFlip Nothing))
+            runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
+                                 Just (FlipCommand _ _) -> True
+                                 _ -> False) ()
+            pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+          else pure (never, never)
+                   ,
+        do
+           if kill actions /= 0
+             then do
+               e <- btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
+               runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
+                                     Just (FireCommand _) -> True
+                                     _ -> False) ()
+               pure (e, fmapMaybe id (current selectCommand <@ runCommand))
+             else pure (never, never)
+                    ,
+        -- TODO: test that there are available coins
+        if majoritySelector C2_Ninja && stealCoin actions
+             then simpleText "You can steal a coin to someone"
+             else pure (never, never)
+                    ,
+        -- TODO: check that there is coin in the bank
+        if takeCoin actions && majoritySelector C6_Bank
+             then do
+             e <- btn [fmt|Take a coin in the bank|] (constDyn True) TakeCoinCommand
              pure (never, e)
-           else pure (never, never)
-                  ]
+             else pure (never, never)
+                    ,
+        -- TODO: check that there is something to destroy
+        if destroyCard actions && majoritySelector C4_KillMinusOne
+             then do
+               e <- btn "DestroyCard" (constDyn True) DestroyCardCommand
+               pure (never, e)
+             else pure (never, never)
+                    ]
 
-  let (selectionEvent, commandEvent) = unzip e
+    let (selectionEvent, commandEvent) = unzip e
 
-  (bEndTurn, _) <- el' "button" $ text "End Turn"
+    (bEndTurn, _) <- el' "button" $ text "End Turn"
 
-  pure $ (leftmost
-          [
-            -- End of turn clean the selection
-            NotSelecting <$ domEvent Click bEndTurn,
-            -- Any command clean the selection
-            NotSelecting <$ leftmost commandEvent,
-            leftmost selectionEvent
-          ]
-         ,
-          leftmost [
-             EndTurn <$ domEvent Click bEndTurn,
-             leftmost commandEvent
-             ]
-         )
+    pure $ (leftmost
+            [
+              -- End of turn clean the selection
+              NotSelecting <$ domEvent Click bEndTurn,
+              -- Any command clean the selection
+              NotSelecting <$ leftmost commandEvent,
+              leftmost selectionEvent
+            ]
+           ,
+            leftmost [
+               EndTurn <$ domEvent Click bEndTurn,
+               leftmost commandEvent
+               ]
+           )
 
 data Attack = FireAttack | FlipAttack
   deriving (Show)
