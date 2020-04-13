@@ -13,8 +13,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# OPTIONS -Wno-name-shadowing #-}
 
-module UIReflex.UI (runUI) where
+module UIReflex.UI (runUI, runUIDeveloper) where
 
 import UIReflex.CSS
 
@@ -25,10 +26,8 @@ import PyF (fmt)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Text.Encoding
-import Data.Traversable (for)
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 import Data.Generics.Labels()
 import Control.Lens
 
@@ -50,6 +49,7 @@ listDyn input = do
 
   holdUniqDynBy f newDyn
 
+projectCardSelection :: Int -> CardSelectionMode -> Set Card
 projectCardSelection pId cm = Set.fromList $ map snd $ filter ((==pId).fst) $ go cm
   where
     go NotSelecting = []
@@ -63,7 +63,7 @@ projectCardSelection pId cm = Set.fromList $ map snd $ filter ((==pId).fst) $ go
 -- TODO: there are many thing in this function which can be recovered from the Dynamic t Game
 playerWidget :: MonadWidget t m => Dynamic t Game -> Dynamic t Int -> Dynamic t (Int -> Bool) -> Dynamic t CardSelectionMode -> (Int, Dynamic t Player) -> m (Event t (Either (Int, Card) KoryoCommands))
 playerWidget game dCurrentPlayerId canStealDyn cardSelectDyn (playerNumber, player) = do
-  (block, eStealCoin) <- el' "div" $ mdo
+  (_, eStealCoin) <- el' "div" $ mdo
     let
       cls = ffor dCurrentPlayerId $ \currentPId ->
         if currentPId == playerNumber
@@ -110,7 +110,7 @@ updateSelection :: (Int -> Attack -> Bool) -> (Int, Card) -> CardSelectionMode -
 updateSelection _ _ NotSelecting = NotSelecting
 updateSelection _canBeFocused (_target, card) currentSel
   | card == Cm1_KillOne || card == Cm1_FlipTwo = currentSel -- You do not have the right to select a -1
-updateSelection canBeFocused sel@(target, card) currentSel@(Selecting (SelectingFire b))
+updateSelection canBeFocused sel@(target, _) currentSel@(Selecting (SelectingFire b))
   | not (canBeFocused target FireAttack) = currentSel -- This player cannot be selected
   | otherwise = Selecting $ SelectingFire $ case b of
   Just sel'
@@ -325,6 +325,7 @@ widgetBurger val = do
     simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
       el "div" $ el "span" $ display dValue
 
+runUIDeveloper :: IO ()
 runUIDeveloper = mainWidgetWithCss css $ do
   el "table" $ do
     el "tr" $ do
@@ -337,6 +338,7 @@ runUIDeveloper = mainWidgetWithCss css $ do
 runUI :: IO ()
 runUI = mainWidgetWithCss css (koryoMain Nothing)
 
+koryoMain :: _ => Maybe String -> m ()
 koryoMain player = mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
@@ -358,7 +360,7 @@ koryoMain player = mdo
       el "p" $ text "Error / Not connected"
       el "p" $ do
         text "Login: "
-        t <- textInput def
+        t <- inputElement def
 
         pure (Login . Text.unpack <$> updated (value t))
     Just dg -> do
@@ -375,6 +377,9 @@ koryoMain player = mdo
 
   pure ()
 
+cardPicker :: _ => Map Card Int
+           -> (Card -> Bool)
+           -> m (Dynamic t (Map Card Int), Dynamic t (Map Card Int))
 cardPicker cards pred = mdo
   currentSelection <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  Map.empty (leftmost [
                                                                               (, 1) <$> eSelect,
@@ -448,3 +453,25 @@ handDestroyor game pId
   (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
 
   pure $ (current (DropCards <$> droppedCards) <@ domEvent Click button)
+
+{-
+TODOs:
+
+Issues noted by my wife:
+
+- personal board is too small with respect to others
+- personal board must be on top
+- seeing which player is playing should be obvious
+- french translation
+- more UI feedback:
+  - General
+  - When selecting for flip and fire
+- Use my own assets for cards
+
+My TODO:
+
+- tests ;)
+- more robust server
+- do not redisplay everything when the board change. Especially during
+  the draw phase. That's annoying!
+-}
