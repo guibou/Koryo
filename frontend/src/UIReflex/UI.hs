@@ -187,18 +187,28 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
       simpleText t = text t >> pure (never, never)
       btn t enabled event = do
         (b, _) <- elDynAttr' "button" (bool ("disabled" =: "disabled") mempty <$> enabled) $ text t
-
         pure (event <$ (domEvent Click b))
 
       selectCommand = selectToCommand <$> dCurrentSelection
+      isFlipping = ffor dCurrentSelection $ \case
+        Selecting (SelectingFlip _) -> True
+        _ -> False
+      isFiring = ffor dCurrentSelection $ \case
+        Selecting (SelectingFire _) -> True
+        _ -> False
 
       -- TODO: check that some action can be done
+
+    let
+      blinkingClass = bool "" "blinking"
+
     e <- mapM (el "div"$) $
       [
         do
           if flipAction actions /= 0
           then do
-            e <- btn [fmt|Flip {flipAction actions}|] (constDyn True) (Selecting (SelectingFlip Nothing))
+            e <- elDynClass "span" (blinkingClass <$> isFlipping) $ do
+              btn ([fmt|Flip {flipAction actions}|]) (constDyn True) (Selecting (SelectingFlip Nothing))
             runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
                                  Just (FlipCommand _ _) -> True
                                  _ -> False) ()
@@ -208,7 +218,8 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
         do
            if kill actions /= 0
              then do
-               e <- btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
+               e <- elDynClass "span" (blinkingClass <$> isFiring) $ do
+                 btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
                runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
                                      Just (FireCommand _) -> True
                                      _ -> False) ()
@@ -473,11 +484,11 @@ Issues noted by my wife:
 
 - personal board is too small with respect to others
 OK - personal board must be on top
-- seeing which player is playing should be obvious
+OK - seeing which player is playing should be obvious
 - french translation
 - more UI feedback:
   - General
-  - When selecting for flip and fire
+OK   - When selecting for flip and fire
 - Use my own assets for cards
 
 My TODO:

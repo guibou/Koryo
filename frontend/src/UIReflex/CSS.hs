@@ -93,3 +93,11 @@ css = (encodeUtf8 . toStrict . render) $ do
       borderRadius (px 5) (px 5) (px 5) (px 5)
       padding (px 0) (px 5) (px 0) (px 5)
       margin (px 2) (px 0) (px 2) (px 0)
+
+  ".blinking" ? "button" ? do
+    animation "blinkingText" (sec 1) linear (sec 0) infinite alternate forwards
+
+  keyframes "blinkingText" [
+    (0, color black),
+    (100, color red)
+    ]
