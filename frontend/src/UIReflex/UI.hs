@@ -362,7 +362,7 @@ widgetGame dPayload = mdo
 
 widgetBurger :: MonadWidget t m => Dynamic t Int -> m ()
 widgetBurger val = do
-  void $ elClass "div" "burger" $ do
+  void $ elDynAttr "div" ((\c -> "class" =: "burger" <> "data-count" =: Text.pack (show c)) <$> val) $ do
     simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
       el "div" $ el "span" $ display dValue
 
