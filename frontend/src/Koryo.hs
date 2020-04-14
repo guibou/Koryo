@@ -218,11 +218,9 @@ drawCards count (gen, acc, availablesCards) =
 
 
 -- TODO: ensure no cheaters
+-- idempotent
 selectCard :: Int -> SelectedFromDraw -> TopLevelGame -> TopLevelGame
-selectCard pNumber selected tgame =
-  tgame {
-    handles = (handles tgame & ix pNumber .~ Selected selected)
-    }
+selectCard pNumber selected tgame = set (#handles . ix pNumber) (Selected selected) tgame
 {-
 ii) Playing phase
 
@@ -262,6 +260,7 @@ C) End of game
    - Count the points
 -}
 
+-- Idempotent
 attemptRevealPhase :: TopLevelGame -> TopLevelGame
 attemptRevealPhase tg@TopLevelGame{game, handles} = case areAllSelected handles of
   Nothing -> tg
@@ -305,8 +304,12 @@ destroyingPhase tg = tg
     handles = map (const WaitingForDestroying) (handles tg)
    }
 
-endPlayerTurn :: TopLevelGame -> TopLevelGame
-endPlayerTurn (over #game nextPlayer . tellHimToDoNothing ->tg)
+-- idempotent
+endPlayerTurn :: Int -> TopLevelGame -> TopLevelGame
+endPlayerTurn pId tg
+  -- Ensure that the current player is the right one
+  | view (#game . #selectedPlayer) tg /= pId = tg
+endPlayerTurn _pId (over #game nextPlayer . tellHimToDoNothing ->tg)
   | selectedPlayer (game tg) /= currentFirstPlayer (game tg) =
     let
       newCards = (\(Selected l) -> l) (handles tg !! (selectedPlayer (game tg)))
@@ -331,6 +334,8 @@ areAllSelected (x:xs) = do
 
 takeCoinInTheBank :: TopLevelGame -> Int -> TopLevelGame
 takeCoinInTheBank tg playerId
+  -- Ensure player can take a coin
+  | preview (#handles . ix playerId . #_DoActions . #takeCoin) tg == Just False = tg
   | availableCoins (game tg) == 0 = tg
   | otherwise = over (#game . #players . ix playerId . #nbCoins) (+1) $
                 set (#handles . ix playerId . #_DoActions . #takeCoin) False $
@@ -338,9 +343,13 @@ takeCoinInTheBank tg playerId
 
 destroyAPersonalCard :: TopLevelGame -> Int -> TopLevelGame
 destroyAPersonalCard tg playerId
+  -- Ensure player can destroy its card
+  | preview (#handles . ix playerId . #_DoActions . #destroyCard) tg == Just False = tg
+  -- Destroy a KillOne
   | Just n <- Map.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_KillOne (n - 1)) $ tg
+  -- Destroy a FlipTwo
   | Just n <- Map.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
                 over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
@@ -348,6 +357,8 @@ destroyAPersonalCard tg playerId
 
 stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
 stealACoinToPlayer tg currentPlayerId otherPlayerId
+  -- Ensure that player can do this action
+  | preview (#handles . ix currentPlayerId . #_DoActions . #stealCoin) tg == Just False = tg
   | (nbCoins . (!! otherPlayerId) . players . game) tg > 0 =
     over (#game . #players . ix currentPlayerId . #nbCoins) (+1) $
     over (#game . #players . ix otherPlayerId . #nbCoins) (subtract 1) $
@@ -355,18 +366,26 @@ stealACoinToPlayer tg currentPlayerId otherPlayerId
   | otherwise =
     set (#handles . ix currentPlayerId . #_DoActions . #stealCoin) False $ tg
 
+-- TODO: do some check
 fireCommand :: TopLevelGame -> Int -> (Int, Card) -> TopLevelGame
-fireCommand tg currentPlayerId (targetId, card) =
-  -- TODO: do some check
-  over (#game . #players . ix targetId . #board) (Map.insertWith (+) card (-1)) $
-  over (#handles . ix currentPlayerId . #_DoActions . #kill) (subtract 1) $ tg
+fireCommand tg currentPlayerId (targetId, card)
+  -- Ensure we have the power
+  | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #kill) tg
+  , n > 0 =
+    over (#game . #players . ix targetId . #board) (Map.insertWith (+) card (-1)) $
+    over (#handles . ix currentPlayerId . #_DoActions . #kill) (subtract 1) $ tg
+  | otherwise = tg
 
+-- TODO: do some check
 flipCommand :: TopLevelGame -> Int -> (Int, Card) -> (Int, Card) -> TopLevelGame
-flipCommand tg currentPlayerId (targetId, card) (targetId', card') =
-  -- TODO: do some check
-  over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromList [(card, (-1)), (card', 1)])) $
-  over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
-  over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
+flipCommand tg currentPlayerId (targetId, card) (targetId', card')
+  -- Ensure we have the power
+  | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #flipAction) tg
+  , n > 0 =
+    over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromList [(card, (-1)), (card', 1)])) $
+    over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
+    over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
+  | otherwise = tg
 
 
 dropCards :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
@@ -379,14 +398,18 @@ dropCards tg' pId cards
       where
         tg = dropCardsForPlayer tg' pId cards
 
+-- idempotent
 dropCardsForPlayer :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
-dropCardsForPlayer tg pId droppedCards =
-  -- go to next player
-  over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
-  -- set current player to nothing to do
-  set (#handles . ix pId) NothingToDo $
-  -- remove his cards
-  over (#game . #players . ix pId . #board) (flip (Map.unionWith (-)) droppedCards) $ tg
+dropCardsForPlayer tg pId droppedCards
+  -- Ensure that it is the right player
+  | pId == view (#game . #selectedPlayer) tg =
+    -- go to next player
+    over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
+    -- set current player to nothing to do
+    set (#handles . ix pId) NothingToDo $
+    -- remove his cards
+    over (#game . #players . ix pId . #board) (flip (Map.unionWith (-)) droppedCards) $ tg
+  | otherwise = tg
 
 -- * Random sampling primitive
 

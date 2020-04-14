@@ -85,7 +85,7 @@ application stateRef pending = do
                 pure $ over #clients ((pId, conn):) state
           Just (GameCommand pId command) -> case command of
             SelectHand s -> modifyGame $ \game -> attemptRevealPhase $ selectCard pId s game
-            EndTurn -> modifyGame $ \game -> endPlayerTurn game
+            EndTurn -> modifyGame $ \game -> endPlayerTurn pId game
             TakeCoinCommand -> modifyGame $ \game -> takeCoinInTheBank game pId
             DestroyCardCommand -> modifyGame $ \game -> destroyAPersonalCard game pId
             StealACoinToPlayer i -> modifyGame $ \game -> stealACoinToPlayer game pId i
