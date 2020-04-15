@@ -16,7 +16,10 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
 
-  exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo, Server, Assets
+  exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo
+  if(!impl(ghcjs))
+    exposed-modules: Assets
+  --  Server
   build-depends:       base
                      , reflex
                      , clay
@@ -33,18 +36,21 @@ library
                      , time
                      , hspec
                      , QuickCheck
-                     , vector
-                     , ghci-pretty
-                     , websockets
                      , aeson
                      , file-embed
                      , base64-bytestring
                      , generic-lens
+  if(!impl(ghcjs))
+    build-depends: websockets
   default-extensions:
 
   ghc-options: -Wall -Wno-partial-type-signatures -Wincomplete-uni-patterns
 
   default-language:    Haskell2010
+
+executable ui
+  main-is: app/MainUI.hs
+  build-depends: base, frontend
 
 source-repository head
   type:     git
