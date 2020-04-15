@@ -134,11 +134,14 @@ updateSelection canBeFocused sel@(player, _) currentSel@(Selecting (SelectingFli
 displayCards :: MonadWidget t m => Dynamic t (Set Card) -> Dynamic t (Map Card Int) -> m (Event t Card)
 displayCards selectedCards cards = do
   selectCardEvent <- elClass "div" "cards" $ do
-    listViewWithKey (Map.filter (/=0) <$> cards) $ \card dCount -> do
-      let selected selStatus
-            | card `Set.member` selStatus = "selected card"
-            | otherwise = "card"
-      elDynClass "div" (selected <$> selectedCards) $ do
+    flip mapM enumerated $ \card -> do
+      let dCount = fromMaybe 0 . Map.lookup card <$> cards
+      let selected selStatus count = cls <> ("data-count" =: Text.pack (show count))
+            where
+              cls
+                | card `Set.member` selStatus = ("class" =: "selected card")
+                | otherwise = ("class" =: "card")
+      elDynAttr "div" (selected <$> selectedCards <*> dCount) $ do
         e <- case Map.lookup card card_images of
           Nothing -> text (Text.pack . show $ card) >> pure never
           Just t -> do
@@ -152,11 +155,9 @@ displayCards selectedCards cards = do
             let cardClick = domEvent Click e
             pure $ cardClick
         widgetBurger dCount
-        pure e
+        pure (card <$ e)
 
-  pure $ ffor (Map.keys <$> selectCardEvent) $ \l -> case l of
-    [c] -> c
-    _ -> error "Too many card selected at once. That's impossible"
+  pure $ leftmost selectCardEvent
 
 description :: Card -> Text
 description = \case
@@ -422,15 +423,15 @@ cardPicker :: _ => Map Card Int
            -> (Card -> Bool)
            -> m (Dynamic t (Map Card Int), Dynamic t (Map Card Int))
 cardPicker cards pred = mdo
-  currentSelection <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  Map.empty (leftmost [
-                                                                              (, 1) <$> eSelect,
-                                                                              (\c -> (c, -1)) <$> eUnselect
-                                                                              ])
+  currentSelection <- foldDyn (\(c, v) m -> Map.insertWith (+) c v m)  Map.empty (leftmost [
+                                                                                     (, 1) <$> eSelect,
+                                                                                     (\c -> (c, -1)) <$> eUnselect
+                                                                                     ])
 
-  currentNotSelected <- foldDyn (\(c, v) m -> Map.filter (/=0) $ Map.insertWith (+) c v m)  cards (leftmost [
-                                                                              (\c -> (c, -1)) <$> eSelect,
-                                                                              (,1) <$> eUnselect
-                                                                              ])
+  currentNotSelected <- foldDyn (\(c, v) m -> Map.insertWith (+) c v m)  cards (leftmost [
+                                                                                   (\c -> (c, -1)) <$> eSelect,
+                                                                                   (,1) <$> eUnselect
+                                                                                   ])
 
   eSelectNotFiltered :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
   let eSelect = ffilter pred eSelectNotFiltered
@@ -446,7 +447,7 @@ handSelector majorityOf5 cards = mdo
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
-        case Map.toList m of
+        case Map.toList (Map.filter (/=0) m) of
           [(c, n)] -> Just $ SelectMany c n
           [(c, 1), (c', 1)] -> Just $ SelectTwo c c'
           _ -> Nothing

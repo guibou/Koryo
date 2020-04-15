@@ -61,6 +61,9 @@ css = (encodeUtf8 . toStrict . render) $ do
     outlineStyle solid
     zIndex 1
 
+  ".card[data-count~=\"0\"]" ? do
+    display none
+
   ".selecting-flip" ? ".card.selected" ? do
     outlineColor black
 
