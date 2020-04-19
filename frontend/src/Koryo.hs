@@ -40,8 +40,22 @@ data Card
 enumerated :: (Bounded t, Enum t) => [t]
 enumerated = [minBound..maxBound]
 
+cardCount :: Card -> Int
+cardCount = \case
+  C1_GivePrio -> 1
+  C2_Ninja -> 2
+  C3_SaveTwoCards -> 3
+  C4_KillMinusOne -> 4
+  C5_TakeTwoDifferent -> 5
+  C6_Bank -> 6
+  C7_Warrior -> 7
+  C8_DrawTwoMore -> 8
+  C9_DoNothing -> 9
+  Cm1_KillOne -> 6
+  Cm1_FlipTwo -> 4
+
 allCards :: Map Card Int
-allCards = Map.fromList (zip enumerated ([1..9] ++ [6, 4]))
+allCards = Map.fromList (map (\c -> (c, cardCount c)) enumerated)
 
 data SelectedFromDraw
   = SelectMany Card Int
