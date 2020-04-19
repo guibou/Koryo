@@ -280,7 +280,7 @@ C) End of game
 -}
 
 -- Idempotent
-attemptRevealPhase :: TopLevelGame -> TopLevelGame
+attemptRevealPhase :: HasCallStack => TopLevelGame -> TopLevelGame
 attemptRevealPhase tg@TopLevelGame{game, handles} = case areAllSelected handles of
   Nothing -> tg
   Just newCards -> let
@@ -324,7 +324,7 @@ destroyingPhase tg = tg
    }
 
 -- idempotent
-endPlayerTurn :: Int -> TopLevelGame -> TopLevelGame
+endPlayerTurn :: HasCallStack => Int -> TopLevelGame -> TopLevelGame
 endPlayerTurn pId tg
   -- Ensure that the current player is the right one
   | view (#game . #selectedPlayer) tg /= pId = tg

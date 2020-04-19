@@ -26,11 +26,11 @@ import Control.Monad (void)
 import PyF (fmt)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Data.Text.Encoding
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
 import Data.Generics.Labels()
 import Control.Lens
+import Data.Text.Encoding
 
 import Koryo
 import Data.Text (Text)

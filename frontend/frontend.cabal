@@ -16,9 +16,9 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
 
-  exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo
+  exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo, Assets
   if(!impl(ghcjs))
-    exposed-modules: Assets
+    exposed-modules: Server
   --  Server
   build-depends:       base
                      , reflex
