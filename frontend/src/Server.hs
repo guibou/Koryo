@@ -17,6 +17,7 @@ import GHC.Generics
 import Control.Exception (try, SomeException)
 import Data.Maybe (catMaybes)
 import System.Random
+import qualified Data.Map as Map
 
 import qualified Network.WebSockets as WS
 
@@ -54,6 +55,7 @@ broadcastPayload stateRef = modifyMVar_ stateRef
 startServer :: [String] -> IO ()
 startServer players = do
   gen <- newStdGen
+  print gen
   state <- newMVar (newServerState players gen)
   WS.runServer "0.0.0.0" 9160 $ application state
 
@@ -83,20 +85,24 @@ application stateRef pending = do
               Just (pId, _) -> do
                 print ("Logged", (pId, loginName))
                 pure $ over #clients ((pId, conn):) state
-          Just (GameCommand pId command) -> case command of
-            SelectHand s -> modifyGame $ \game -> attemptRevealPhase $ selectCard pId s game
-            EndTurn -> modifyGame $ \game -> endPlayerTurn pId game
-            TakeCoinCommand -> modifyGame $ \game -> takeCoinInTheBank game pId
-            DestroyCardCommand -> modifyGame $ \game -> destroyAPersonalCard game pId
-            StealACoinToPlayer i -> modifyGame $ \game -> stealACoinToPlayer game pId i
-            FireCommand c -> modifyGame $ \game -> fireCommand game pId c
-            FlipCommand c c' -> modifyGame $ \game -> flipCommand game pId c c'
-            DropCards dp -> modifyGame $ \game -> dropCards game pId dp
+          Just (GameCommand pId command) -> modifyGame (executeCommand pId command)
 
         broadcastPayload stateRef
 
     t <- try @SomeException $ loop
     print ("Unexpected end of the loop", t)
+
+executeCommand :: Int
+                        -> KoryoCommands -> TopLevelGame -> TopLevelGame
+executeCommand pId command game = case command of
+  SelectHand s -> attemptRevealPhase $ selectCard pId s game
+  EndTurn -> endPlayerTurn pId game
+  TakeCoinCommand -> takeCoinInTheBank game pId
+  DestroyCardCommand -> destroyAPersonalCard game pId
+  StealACoinToPlayer i -> stealACoinToPlayer game pId i
+  FireCommand c -> fireCommand game pId c
+  FlipCommand c c' -> flipCommand game pId c c'
+  DropCards dp -> dropCards game pId dp
 
 instance WS.WebSocketsData (Maybe RemoteCommand) where
   fromDataMessage (WS.Text t _) = Aeson.decode t
