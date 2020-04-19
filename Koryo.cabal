@@ -1,9 +1,11 @@
+cabal-version:       2.2
+
 name:                Koryo
 version:             0.1.0.0
 -- synopsiss:
 -- description:
 homepage:            https://github.com/guibou/Koryo#readme
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Guillaume Bouchard
 maintainer:          guillaum.bouchard@gmail.com
@@ -11,10 +13,15 @@ copyright:           2020 Guillaume Bouchard
 category:            Web
 build-type:          Simple
 extra-source-files:  README.md, images/1.png
-cabal-version:       >=1.10
+
+common shared-properties
+  hs-source-dirs:      src
+  ghc-options: -Wall -Wno-partial-type-signatures -Wincomplete-uni-patterns
+  default-language:    Haskell2010
+
 
 library
-  hs-source-dirs:      src
+  import: shared-properties
 
   exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo, Assets
   if(!impl(ghcjs))
@@ -41,10 +48,6 @@ library
                      , generic-lens
   if(!impl(ghcjs))
     build-depends: websockets
-
-  ghc-options: -Wall -Wno-partial-type-signatures -Wincomplete-uni-patterns
-
-  default-language:    Haskell2010
 
 executable ui
   main-is: app/MainUI.hs
