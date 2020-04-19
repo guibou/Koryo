@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -139,23 +140,16 @@ displayCards selectedCards cards = do
       let selected selStatus count = cls <> ("data-count" =: Text.pack (show count))
             where
               cls
-                | card `Set.member` selStatus = ("class" =: "selected card")
-                | otherwise = ("class" =: "card")
-      elDynAttr "div" (selected <$> selectedCards <*> dCount) $ do
-        e <- case Map.lookup card card_images of
-          Nothing -> text (Text.pack . show $ card) >> pure never
-          Just t -> do
-            (e, _) <- elAttr' "img" (Map.fromList [
-                             ("src", "data:image/png;base64," <> (decodeUtf8 t))
-                               --("width", "100")
-                             ]) $ pure ()
+                | card `Set.member` selStatus = ("class" =: ("selected card " <> (Text.pack $ show card)))
+                | otherwise = ("class" =: ("card " <> (Text.pack $ show card)))
+      (e, _) <- elDynAttr' "div" (selected <$> selectedCards <*> dCount) $ do
             elClass "div" "help" $ do
               elClass "div" "description" $ text $ description card
               elClass "div" "marker" $ text "?"
-            let cardClick = domEvent Click e
-            pure $ cardClick
-        widgetBurger dCount
-        pure (card <$ e)
+
+            widgetBurger card dCount
+      let cardClick = domEvent Click e
+      pure $ (card <$ cardClick)
 
   pure $ leftmost selectCardEvent
 

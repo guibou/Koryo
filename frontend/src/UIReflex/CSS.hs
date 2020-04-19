@@ -6,14 +6,18 @@ import Prelude hiding (div, span)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Encoding (encodeUtf8)
 import Clay
-
+import Koryo
+import Assets
+import Data.String
 import Data.ByteString (ByteString)
+import Data.Text (Text)
 
 
-css :: ByteString
-css = (encodeUtf8 . toStrict . render) $ do
+css :: Text -> ByteString
+css hostname = (encodeUtf8 . toStrict . render) $ do
   body ? do
-    backgroundColor white
+    backgroundColor indigo
+    color white
 
   "td" ? do
     borderColor green
@@ -62,7 +66,12 @@ css = (encodeUtf8 . toStrict . render) $ do
     zIndex 1
 
   ".card[data-count~=\"0\"]" ? do
-    display none
+    ".help" ? do
+      opacity 0
+    width (px 0)
+
+    -- So we cannot click on it when disapearing
+    pointerEvents none
 
   ".selecting-flip" ? ".card.selected" ? do
     outlineColor black
@@ -71,27 +80,50 @@ css = (encodeUtf8 . toStrict . render) $ do
     outlineColor red
 
   ".card" ? do
+    ".help" ? do
+      opacity 100
     position relative
 
-    "img" ? do
-      width (vw 6)
+    backgroundSize contain
+    width (vw 6)
+    height (vw (6 / 0.62))
 
   ".card" ? do
-    animation "appear" (sec 1) linear (sec 0) normal alternate forwards
+    "transition" -: "width 1s"
+    backgroundRepeat noRepeat
 
   ".card" ? ".burger" ? do
+    color black
     pointerEvents none
     position absolute
     bottom (px 0)
     left (px 0)
 
-    "div:first-child" ? span ? do
+    "div.visible" ? do
       visibility visible
+      animation "appear" (sec 0.5) linear (sec 0) (iterationCount 1) alternate forwards
 
-    "div" ? span ? do
-      visibility hidden
+    "div.visible.lt" ? span ? do
+      opacity 0
+
+    "div.visible.eq" ? span ? do
+      visibility visible
+      zIndex 4
 
     "div" ? do
+      "transition" -: "opacity 1s"
+      animation "disappear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
+
+    "div.visible.eq" ? do
+      animation "appear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
+      zIndex 3
+
+    "div" ? span ? do
+      mempty
+      -- visibility hidden
+
+    "div" ? do
+      -- opacity 0
       pointerEvents none
       backgroundColor gold
       borderColor gold
@@ -109,8 +141,15 @@ css = (encodeUtf8 . toStrict . render) $ do
     ]
 
   keyframes "appear" [
-    (0, opacity 0),
+    (0, opacity 0 <> transform (scale 0 0)),
+    (50, opacity 100 <> transform (scale 3 3)),
     (100, opacity 100)
+    ]
+
+  keyframes "disappear" [
+    (0, transform (scale 1 1)),
+    (50, transform (scale 3 3) <> backgroundColor red),
+    (100, transform (scale 0 0))
     ]
 
   ".help" ? do
@@ -146,3 +185,29 @@ css = (encodeUtf8 . toStrict . render) $ do
       margin (px 2) (px 0) (px 2) (px 0)
       backgroundColor purple
       color white
+
+  flip mapM_ enumerated $ \card -> do
+    ".cards" ? (fromString $ "." <> show card) ? do
+      backgroundImage (url $ card_url hostname card)
+
+  ".roundedBlock" ? do
+    borderWidth (px 4)
+    borderColor purple
+    borderStyle solid
+    backgroundColor orchid
+
+  ".coins" ? do
+    display flex
+    "div" ? do
+      animation "disappear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
+      opacity 0
+      backgroundImage (url $ coin_url hostname)
+      backgroundSize contain
+      backgroundRepeat noRepeat
+      width (vw 4)
+      "span" ? do
+        zIndex (-1)
+
+    "div.visible" ? do
+      opacity 100
+      animation "appear" (sec 0.5) linear (sec 0) (iterationCount 1) alternate forwards
