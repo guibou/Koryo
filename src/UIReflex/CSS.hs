@@ -140,6 +140,11 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     (100, color red)
     ]
 
+  keyframes "blinkCoin" [
+    (0, opacity 50),
+    (100, opacity 100 <> ("filter" -: "sepia(90%) hue-rotate(180deg)") )
+    ]
+
   keyframes "appear" [
     (0, opacity 0 <> transform (scale 0 0)),
     (50, opacity 100 <> transform (scale 3 3)),
@@ -196,18 +201,32 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     borderStyle solid
     backgroundColor orchid
 
+  ".coins.canSteal" ? ".last" ? do
+      animation "blinkCoin" (sec 1) linear (sec 0) infinite alternate forwards
+
   ".coins" ? do
     display flex
     "div" ? do
       animation "disappear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
       opacity 0
+      transform (scale 0 0)
       backgroundImage (url $ coin_url hostname)
       backgroundSize contain
       backgroundRepeat noRepeat
       width (vw 4)
       "span" ? do
-        zIndex (-1)
+        visibility hidden
 
     "div.visible" ? do
+      transform (scale 1 1)
       opacity 100
       animation "appear" (sec 0.5) linear (sec 0) (iterationCount 1) alternate forwards
+
+{-
+Tentative to disable animation on load
+
+  ".preload" ? "*" ? do
+    "transition" -: "none !important"
+    "animation" -: "none !important"
+
+-}

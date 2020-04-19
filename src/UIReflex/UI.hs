@@ -84,13 +84,11 @@ playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
       dynText (ffor game $ \game ->
                   let currentScore = computeScores (players game) !! playerNumber
                   in [fmt| - Score: {currentScore}|])
-    eStealCoin <- elClass "div" "coin" $ do
-      text "Pieces: "
-      displayCoins (nbCoins <$> player)
-      let enabled = ffor canStealDyn $ \canSteal -> bool ("disabled" =: "disabled") mempty (canSteal playerNumber)
-      (b, _) <- elDynAttr' "button" enabled (text "Voler une pièce !")
+    eStealCoin <- do
+      let enabled = ffor canStealDyn $ \canSteal -> canSteal playerNumber
 
-      pure (StealACoinToPlayer playerNumber <$ domEvent Click b)
+      clickCoin <- displayCoins enabled (nbCoins <$> player)
+      pure $ gate (current enabled) (StealACoinToPlayer playerNumber <$ clickCoin)
 
     eventSelectCard <- displayCards (projectCardSelection playerNumber <$> cardSelectDyn) (board <$> player)
     pure [Right <$> eStealCoin, Left . (playerNumber,) <$> eventSelectCard]
@@ -246,13 +244,6 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
              then elClass "div" "roundedBlock" $ simpleText "Vous pouvez volez une pièce à un autre joueur. Regardez à coté de leur nom."
              else pure (never, never)
                     ,
-        -- TODO: check that there is coin in the bank
-        if takeCoin actions && majoritySelector C6_Bank
-             then elClass "div" "roundedBlock" $ do
-             e <- btn [fmt|Prendre une pièce dans la banque|] (constDyn True) TakeCoinCommand
-             pure (never, e)
-             else pure (never, never)
-                    ,
         -- TODO: check that there is something to destroy
         if destroyCard actions && majoritySelector C4_KillMinusOne
              then elClass "div" "roundedBlock" $ do
@@ -313,9 +304,19 @@ widgetGame dPayload = mdo
               _ -> False
           && currentPlayerId /= otherPlayerId
 
+      canTakeCoinInBank game currentPlayerHand currentPlayerId =
+        -- enough coins in the bank
+        availableCoins (game) > 0
+        -- Have the 6 for current player
+          && evaluateMajorityFor C6_Bank (map board (players game)) == Just currentPlayerId
+          --  have a takeCoin
+          && case currentPlayerHand of
+              DoActions l ->  takeCoin l
+              _ -> False
+
       canStealDyn = canSteal <$> dg <*> dHand <*> dCurrentPlayerId
 
-    elClass "div" "gameStatus" $ do
+    evtStatus <- elClass "div" "gameStatus" $ do
       let
         tg t f = do
           el "p" $ do
@@ -324,9 +325,14 @@ widgetGame dPayload = mdo
       tg "Tour actuel: " currentRound
       el "p" $ dynText $ (\g -> [fmt|Carte piochées: {cardsDrawAtRound $ currentRound g:d} / Carte à garder: {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
 
-      displayCoins (availableCoins <$> dg)
+      let
+        canTakeCoinDyn = canTakeCoinInBank <$> dg <*> dHand <*> dCurrentPlayerId
 
-    elClass "div" "gameArea" $ mdo
+      click <- displayCoins canTakeCoinDyn (availableCoins <$> dg)
+
+      pure $ gate (current canTakeCoinDyn) (TakeCoinCommand <$ click)
+
+    (commandArea, selectionEvt) <- elClass "div" "gameArea" $ mdo
       (ePlayer :: _) <- elClass "div" "players" $ do
         asList <- listDyn (players <$> dg)
 
@@ -358,15 +364,20 @@ widgetGame dPayload = mdo
         ]
 
       pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
+    pure $ (leftmost [evtStatus, commandArea], selectionEvt)
   pure events
 
-displayCoins :: MonadWidget t m => Dynamic t Int -> m ()
-displayCoins currentCount = elClass "div" "coins" $ flip mapM_ [1..8] $ \c -> do
-  let
-    cls c c'
-      | c <= c' = "visible"
-      | otherwise = ""
-  elDynClass "div" (cls c <$> currentCount) $ el "span" $ text (Text.pack . show $ c)
+displayCoins :: MonadWidget t m => Dynamic t Bool -> Dynamic t Int -> m (Event t ())
+displayCoins canPick currentCount = do
+  (w, _) <- elDynClass' "div" (bool "coins" "coins canSteal" <$> canPick) $ flip mapM_ [1..8] $ \c -> do
+    let
+      cls c c'
+        | c < c' = "visible"
+        | c <= c' = "visible last"
+        | otherwise = ""
+    elDynClass "div" (cls c <$> currentCount) $ el "span" $ text (Text.pack . show $ c)
+
+  pure $ domEvent Click w
 
 widgetBurger :: MonadWidget t m => Card -> Dynamic t Int -> m ()
 widgetBurger card val = do
@@ -400,7 +411,7 @@ koryoHead = do
   pure ()
 
 koryoMain :: MonadWidget t m => Maybe String -> m ()
-koryoMain player = mdo
+koryoMain player = elClass "div" "preload" $ mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
   raw <- jsonWebSocket @RemoteCommand @Payload ("ws://" <> currentHost <> ":9160") $ def {

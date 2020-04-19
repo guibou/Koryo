@@ -1,1 +1,1 @@
-((nil . ((dante-repl-command-line . ("cabal" "repl" "frontend")))))
+((nil . ((dante-repl-command-line . ("cabal" "repl")))))
