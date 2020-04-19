@@ -18,9 +18,11 @@ import Data.List (find)
 import Data.Maybe (fromMaybe,catMaybes,fromJust)
 import Test.Hspec
 import Data.Bool (bool)
-import Control.Lens
+import Test.QuickCheck
+import Control.Lens (view, set, over, at, ix, preview, (^?))
 import Data.Aeson
 import GHC.Generics
+import Control.Monad (replicateM)
 import Data.Generics.Labels()
 
 data Card
@@ -180,15 +182,17 @@ evaluateMajorityFor card decks = let
              | otherwise -> Nothing
            Nothing -> Nothing
 
+-- TODO: corriger le compte du 1 pour le score
 computeScores :: [Player] -> [Int]
 computeScores players = let
-  majoritiesFor = map (\c -> evaluateMajorityFor c (map board players)) [C1_GivePrio .. C9_DoNothing]
+  majoritiesFor = map (\c -> evaluateMajorityFor c (map (over (at C1_GivePrio) (const $ Just 0)) . map board $ players)) [C1_GivePrio .. C9_DoNothing]
   penalities = map countPenalities players
   coins = map nbCoins players
 
+  bonusFor1 = map (fromMaybe 0 . Map.lookup C1_GivePrio) (map board players)
   scores = Map.fromListWith (+) $ catMaybes $ zipWith (\playerM points -> (,points) <$> playerM)  majoritiesFor [1..9]
 
-  in zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) $ zipWith (+) coins penalities
+  in zipWith (+) bonusFor1 $ zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) $ zipWith (+) coins penalities
 
 countPenalities :: Player -> Int
 countPenalities player = - (fromMaybe 0 (Map.lookup Cm1_KillOne (board player)) + fromMaybe 0 (Map.lookup Cm1_FlipTwo (board player)))
