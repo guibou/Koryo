@@ -81,9 +81,14 @@ playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
                elClass "span" "currentPlayer" $ text "Joueur actuel"
                                     else blank
               )
+      {-
+       -- Score display is disabled because people must count by themself
+
       dynText (ffor game $ \game ->
                   let currentScore = computeScores (players game) !! playerNumber
                   in [fmt| - Score: {currentScore}|])
+      -}
+
     eStealCoin <- do
       let enabled = ffor canStealDyn $ \canSteal -> canSteal playerNumber
 
