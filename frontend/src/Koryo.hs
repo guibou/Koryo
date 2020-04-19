@@ -444,23 +444,51 @@ weightedPickMap currentMap n gen =
 
 -- * Tests
 spec :: SpecWith ()
-spec = describe "majority" $ do
-  describe "no 1" $ do
-    it "no majority for equality" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` Nothing
-    it "majority" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
-  describe "with 1" $ do
-    it "majority for bigger" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
-    it "majority for equal" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` Just 1
-    it "majority for bigger" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
-    it "no majority for zero" $ do
-     evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 0)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` Nothing
+spec = do
+  describe "majority" $ do
+    describe "no 1" $ do
+      it "no majority for equality" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` Nothing
+      it "majority" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
+    describe "with 1" $ do
+      it "majority for bigger" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
+      it "majority for equal" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` Just 1
+      it "majority for bigger" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
+      it "no majority for zero" $ do
+       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 0)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` Nothing
 
+  describe "score" $ do
+    let testScore bs = computeScores (map (\b -> Player {nbCoins = 0, board = b}) bs)
+
+    describe "no 1" $ do
+      it "no majority" $ do
+        testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 0]
+      it "majority" $ do
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 5]
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 0]
+    describe "with 1" $ do
+      it "majority for bigger" $ do
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 1]
+      it "majority for equal" $ do
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 1]
+      it "majority for bigger" $ do
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 6]
+      it "no majority for zero" $ do
+       testScore [Map.fromList [(C5_TakeTwoDifferent, 0)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` [0, 1]
+
+{-
+  describe "flip" $ do
+    it "keep the number of card constant" $ do
+      property (G
+-}
+
+  -- Tests for flip, ensure that there is no card creation.
+  -- Roughly, I need a lot of property test
 
 -- Commands
 
@@ -500,3 +528,12 @@ data Payload = Payload Game Hand Int
 -- OK. 9: handled (only for score)
 -- OK: -1 black (will work with 2)
 -- OK: -1 red (will work with 7)
+
+genHand :: Gen (Map Card Int)
+genHand = do
+  l <- replicateM 10 $ do
+    c <- elements enumerated
+    Positive n <- arbitrary
+
+    pure (c, n)
+  pure $ Map.fromListWith (+) l
