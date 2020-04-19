@@ -10,21 +10,16 @@
       {
         clay = pkgs.haskell.lib.doJailbreak superPkgs.clay;
         random-shuffle = superPkgs.callHackage "random-shuffle" "0.0.4" {};
-        # websockets = superPkgs.callHackage "websockets" "0.12.5.3" {};
       }
   )];
 }).project ({ pkgs, ... }: {
   useWarp = true;
   packages = {
-#    common = ./common;
-    frontend = ./frontend;
-#    backend = ./backend;
+    Koryo = ./.;
   };
 
   shells = {
-#    ghc = ["common" "backend" "frontend"];
-#    ghcjs = ["common" "frontend"];
-    ghc = ["frontend"];
-    ghcjs = ["frontend"];
+    ghc = ["Koryo"];
+    ghcjs = ["Koryo"];
   };
 })

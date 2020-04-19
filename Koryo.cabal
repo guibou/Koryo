@@ -1,4 +1,4 @@
-name:                frontend
+name:                Koryo
 version:             0.1.0.0
 -- synopsiss:
 -- description:
@@ -48,11 +48,11 @@ library
 
 executable ui
   main-is: app/MainUI.hs
-  build-depends: base, frontend
+  build-depends: base, Koryo
 
 executable server
  main-is: app/MainServer.hs
- build-depends: base, frontend
+ build-depends: base, Koryo
  if(impl(ghcjs))
    buildable: False
 
