@@ -253,7 +253,7 @@ ii) Playing phase
 selectionToMap :: SelectedFromDraw -> Map Card Int
 selectionToMap sel = case sel of
   SelectMany c i -> Map.singleton c i
-  SelectTwo c c' -> Map.fromList [(c, 1), (c', 1)]
+  SelectTwo c c' -> Map.fromListWith (+) [(c, 1), (c', 1)]
 
 
 revealPlayer :: SelectedFromDraw -> Player -> (Player, Actions)
@@ -401,8 +401,8 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card')
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #flipAction) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromList [(card, (-1)), (card', 1)])) $
-    over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromList [(card', (-1)), (card, 1)])) $
+    over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromListWith (+) [(card, (-1)), (card', 1)])) $
+    over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromListWith (+) [(card', (-1)), (card, 1)])) $
     over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
   | otherwise = tg
 
