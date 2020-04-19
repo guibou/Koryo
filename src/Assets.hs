@@ -18,8 +18,8 @@ card_path = \case
   C7_Warrior -> "7.png"
   C8_DrawTwoMore -> "8.png"
   C9_DoNothing -> "9.png"
-  Cm1_KillOne -> "barbare.png"
-  Cm1_FlipTwo -> "echange.png"
+  Cm1_KillOne -> "rouge.png"
+  Cm1_FlipTwo -> "noire.png"
 
 card_url :: Text -> Card -> Text
 card_url hostname c = "http://" <> hostname <> ":3004/" <> card_path c
