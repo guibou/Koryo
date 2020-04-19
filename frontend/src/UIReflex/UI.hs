@@ -72,23 +72,23 @@ playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
       dyn_ (ffor game $ \game -> if currentFirstPlayer game == playerNumber
                                 then do
                text " - "
-               elClass "span" "firstPlayer" $ text "First Player"
+               elClass "span" "firstPlayer" $ text "Premier joueur"
                                 else blank
               )
       dyn_ (ffor game $ \game -> if selectedPlayer game == playerNumber
                                     then do
                text " - "
-               elClass "span" "currentPlayer" $ text "Current Player"
+               elClass "span" "currentPlayer" $ text "Joueur actuel"
                                     else blank
               )
       dynText (ffor game $ \game ->
                   let currentScore = computeScores (players game) !! playerNumber
                   in [fmt| - Score: {currentScore}|])
     eStealCoin <- elClass "div" "coin" $ do
-      text "Coins: "
-      display (nbCoins <$> player)
+      text "Pieces: "
+      displayCoins (nbCoins <$> player)
       let enabled = ffor canStealDyn $ \canSteal -> bool ("disabled" =: "disabled") mempty (canSteal playerNumber)
-      (b, _) <- elDynAttr' "button" enabled (text "Steal!")
+      (b, _) <- elDynAttr' "button" enabled (text "Voler une pièce !")
 
       pure (StealACoinToPlayer playerNumber <$ domEvent Click b)
 
@@ -179,10 +179,10 @@ displayHand :: forall t m. MonadWidget t m
             -> (Card -> Bool)
             -> Hand
             -> m (Event t CardSelectionMode, Event t KoryoCommands)
-displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
-  NothingToDo -> text "Wait until it is your turn" >> pure (never, never)
-  WaitingForDestroying -> do
-    text "Destroying Phase"
+displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId) (traceDyn "CurrentSelection"->dCurrentSelection) majoritySelector = \case
+  NothingToDo -> elClass "div" "roundedBlock" $ text "Votre tour est fini. Attendez le prochain." >> pure (never, never)
+  WaitingForDestroying -> elClass "div" "roundedBlock" $ do
+    text "Phase de destruction"
 
     eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
     eDestroyS <- switchHold never eDestroy
@@ -191,8 +191,8 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
   Draw m -> do
     e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
     pure (never, SelectHand <$> e)
-  Selected sel -> do
-    text "You selected some cards. Wait until it is your turn to play"
+  Selected sel -> elClass "div" "roundedBlock" $ do
+    text "Vous aves selectionné des cartes. Attendez votre tour maintenant."
     void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
     pure (never, never)
   DoActions actions -> do
@@ -219,10 +219,11 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
       [
         do
           if flipAction actions /= 0
-          then do
+          then elClass "div" "roundedBlock" $ do
+            el "p" $ text "Vous pouvez échanger des cartes:"
             e <- elDynClass "span" (blinkingClass <$> isFlipping) $ do
-              btn ([fmt|Flip {flipAction actions}|]) (constDyn True) (Selecting (SelectingFlip Nothing))
-            runCommand <- btn "Confirm Flip" (ffor selectCommand $ \case
+              btn ([fmt|Echanger deux cartes {flipAction actions}|]) (constDyn True) (Selecting (SelectingFlip Nothing))
+            runCommand <- btn "Confirmer l'échange" (ffor selectCommand $ \case
                                  Just (FlipCommand _ _) -> True
                                  _ -> False) ()
             pure (e, fmapMaybe id (current selectCommand <@ runCommand))
@@ -230,10 +231,11 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
                    ,
         do
            if kill actions /= 0
-             then do
+             then elClass "div" "roundedBlock" $ do
+               el "p" $ text "Vous pouvez détruire des cartes:"
                e <- elDynClass "span" (blinkingClass <$> isFiring) $ do
-                 btn [fmt|Kill {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
-               runCommand <- btn "Confirm Fire" (ffor selectCommand $ \case
+                 btn [fmt|Détruire une carte {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
+               runCommand <- btn "Confirmer la destruction de la carte ciblée." (ffor selectCommand $ \case
                                      Just (FireCommand _) -> True
                                      _ -> False) ()
                pure (e, fmapMaybe id (current selectCommand <@ runCommand))
@@ -241,27 +243,29 @@ displayHand dGame dCurrentPlayerId dCurrentSelection majoritySelector = \case
                     ,
         -- TODO: test that there are available coins
         if majoritySelector C2_Ninja && stealCoin actions
-             then simpleText "You can steal a coin to someone"
+             then elClass "div" "roundedBlock" $ simpleText "Vous pouvez volez une pièce à un autre joueur. Regardez à coté de leur nom."
              else pure (never, never)
                     ,
         -- TODO: check that there is coin in the bank
         if takeCoin actions && majoritySelector C6_Bank
-             then do
-             e <- btn [fmt|Take a coin in the bank|] (constDyn True) TakeCoinCommand
+             then elClass "div" "roundedBlock" $ do
+             e <- btn [fmt|Prendre une pièce dans la banque|] (constDyn True) TakeCoinCommand
              pure (never, e)
              else pure (never, never)
                     ,
         -- TODO: check that there is something to destroy
         if destroyCard actions && majoritySelector C4_KillMinusOne
-             then do
-               e <- btn "DestroyCard" (constDyn True) DestroyCardCommand
+             then elClass "div" "roundedBlock" $ do
+               e <- btn "Detruire une carte -1" (constDyn True) DestroyCardCommand
                pure (never, e)
              else pure (never, never)
                     ]
 
     let (selectionEvent, commandEvent) = unzip e
 
-    (bEndTurn, _) <- el' "button" $ text "End Turn"
+    (bEndTurn, _) <- elClass "div" "roundedBlock" $ do
+         el "p" $ text "C'est votre tour. Réalisez les differentes actions proposée au dessus, puis terminez votre tour."
+         el' "button" $ text "Fin du tour."
 
     pure $ (leftmost
             [
@@ -317,9 +321,10 @@ widgetGame dPayload = mdo
           el "p" $ do
             text t
             display (f <$> dg)
-      tg "Current round: " currentRound
-      el "p" $ dynText $ (\g -> [fmt|Drawn cards: {cardsDrawAtRound $ currentRound g:d} / Cards on board: {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
-      tg "Available coins: " availableCoins
+      tg "Tour actuel: " currentRound
+      el "p" $ dynText $ (\g -> [fmt|Carte piochées: {cardsDrawAtRound $ currentRound g:d} / Carte à garder: {cardsOnBoardAtRound $ currentRound g:d}|]) <$> dg
+
+      displayCoins (availableCoins <$> dg)
 
     elClass "div" "gameArea" $ mdo
       (ePlayer :: _) <- elClass "div" "players" $ do
@@ -338,7 +343,7 @@ widgetGame dPayload = mdo
         switchHold never evts
 
       (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
-        e <- dyn (displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> dBoard <*> dCurrentPlayerId)) <*> dHand)
+        e <- dyn (traceDynWith (const "displayHand") $ displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> (traceDyn "board" dBoard) <*> (traceDyn "pid" dCurrentPlayerId))) <*> (traceDyn "hand" dHand))
         let (a, b) = splitE e
         a' <- switchHold never a
         b' <- switchHold never b
@@ -355,14 +360,26 @@ widgetGame dPayload = mdo
       pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
   pure events
 
-widgetBurger :: MonadWidget t m => Dynamic t Int -> m ()
-widgetBurger val = do
+displayCoins :: MonadWidget t m => Dynamic t Int -> m ()
+displayCoins currentCount = elClass "div" "coins" $ flip mapM_ [1..8] $ \c -> do
+  let
+    cls c c'
+      | c <= c' = "visible"
+      | otherwise = ""
+  elDynClass "div" (cls c <$> currentCount) $ el "span" $ text (Text.pack . show $ c)
+
+widgetBurger :: MonadWidget t m => Card -> Dynamic t Int -> m ()
+widgetBurger card val = do
   void $ elDynAttr "div" ((\c -> "class" =: "burger" <> "data-count" =: Text.pack (show c)) <$> val) $ do
-    simpleList ((\x -> enumFromThenTo x (x-1) 1) <$> val) $ \dValue -> do
-      el "div" $ el "span" $ display dValue
+    let cc = cardCount card
+    flip mapM [cc,(cc-1)..1] $ \i -> do
+      elDynClass "div" ((\v -> case compare i v of
+                           LT -> "lt visible"
+                           EQ -> "eq visible"
+                           GT -> "gt") <$> val) $ el "span" $ text (Text.pack $ show i)
 
 runUIDeveloper :: IO ()
-runUIDeveloper = mainWidgetWithCss css $ do
+runUIDeveloper = mainWidgetWithHead koryoHead $ do
   el "table" $ do
     el "tr" $ do
       el "td" $ koryoMain (Just "Guillaume")
@@ -371,10 +388,18 @@ runUIDeveloper = mainWidgetWithCss css $ do
       el "td" $ koryoMain (Just "Mauricio")
       el "td" $ koryoMain (Just "Hélène")
 
-runUI :: IO ()
-runUI = mainWidgetWithCss css (koryoMain Nothing)
+runUI :: Maybe String -> IO ()
+runUI p = mainWidgetWithHead koryoHead (koryoMain p)
 
-koryoMain :: _ => Maybe String -> m ()
+koryoHead :: _ => m ()
+koryoHead = do
+  el "title" $ text "Koryo - Un jeu trop bien"
+  currentHost <- Text.takeWhile (/=':') <$> getLocationHost
+  elAttr "style" ("type" =: "text/css") $ text $ decodeUtf8 (css currentHost)
+
+  pure ()
+
+koryoMain :: MonadWidget t m => Maybe String -> m ()
 koryoMain player = mdo
   currentHost <- Text.takeWhile (/=':') <$> getLocationHost
 
@@ -392,8 +417,8 @@ koryoMain player = mdo
   currentGame <- maybeDyn lastMessage
 
   evt <- dyn $ flip fmap currentGame $ \e -> case e of
-    Nothing -> do
-      el "p" $ text "Error / Not connected"
+    Nothing -> elClass "div" "roundedBlock" $ do
+      el "p" $ text "Pour commencer une partie, entrez votre nom:"
       el "p" $ do
         text "Login: "
         t <- inputElement def
@@ -435,12 +460,13 @@ cardPicker cards pred = mdo
   pure (currentSelection, currentNotSelected)
 
 handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
-handSelector majorityOf5 cards = mdo
-  el "p" $ text "Select your cards"
+handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
+  el "p" $ text "Selection des cartes. La ligne du haut correspond à votre pioche. La ligne du bas correspond à votre selection. Il suffit de cliquer pour passer les cartes d'une ligne à l'autre."
   (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
+        -- Shrink the card list out of the 0 values
         case Map.toList (Map.filter (/=0) m) of
           [(c, n)] -> Just $ SelectMany c n
           [(c, 1), (c', 1)] -> Just $ SelectTwo c c'
@@ -452,15 +478,16 @@ handSelector majorityOf5 cards = mdo
         Just (SelectMany _ _) -> mempty
         _ -> "disabled" =: "disabled"
 
-  (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
+  (button, _) <- elDynAttr' "button" buttonStatus $ text "Valider la selection"
 
   pure (flip fforMaybe id $ current validSelection <@ (domEvent Click button))
 
 handDestroyor :: MonadWidget t m => Game -> Int -> m (Event t KoryoCommands)
 handDestroyor game pId
-  | selectedPlayer game /= pId = text "Wait for the other to destroy their cards" >> pure never
-  | otherwise = mdo
+  | selectedPlayer game /= pId = elDynClass "div" "roundedBlock" $ text "Phase de défausse. Attendez votre tour." >> pure never
+  | otherwise = elDynClass "div" "roundedBlock" $ mdo
   let cards = view (#players . ix pId . #board) game
+  el "p" $ text "Choissizer les cartes à supprimer. La ligne du haut correspond aux cartes à conserver."
 
   let
     currentNbCards = nbCards <$> newHand
@@ -471,10 +498,10 @@ handDestroyor game pId
       (cardsOnBoardAtRound . currentRound $ game) + bool 0 2 (majorityOnNewBoard game)
 
   el "p" $ do
-    text "Your number of card: "
+    text "Nombre actuel de carte : "
     display currentNbCards
   el "p" $ do
-    text "You must have no more than: "
+    text "Vous pouvez en conserver : "
     display maxCardForMe
 
   (droppedCards, newHand) <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
@@ -486,7 +513,7 @@ handDestroyor game pId
   let
     buttonStatus = bool ("disabled" =: "disabled") mempty <$> validSelection
 
-  (button, _) <- elDynAttr' "button" buttonStatus $ text "Validate Selection"
+  (button, _) <- elDynAttr' "button" buttonStatus $ text "Valider la selection"
 
   pure $ (current (DropCards <$> droppedCards) <@ domEvent Click button)
 
@@ -496,21 +523,14 @@ TODOs:
 Issues noted by my wife:
 
 - personal board is too small with respect to others
-OK - personal board must be on top
-OK - seeing which player is playing should be obvious
-- french translation
-- more UI feedback:
-  - General
-OK   - When selecting for flip and fire
 - Use my own assets for cards
 
 My TODO:
 
 - tests ;)
+  (Damned,
 - more robust server
 - automatic actions
-DONE - do not redisplay everything when the board change. Especially during
-  the draw phase. That's annoying!
 
 GAME FEATURES:
 - see the number of card drawn by others
