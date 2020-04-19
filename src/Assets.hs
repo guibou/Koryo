@@ -28,3 +28,16 @@ card_url hostname c = "http://" <> hostname <> ":3004/" <> card_path c
 coin_url hostname = "http://" <> hostname <> ":3004/coin.png"
 
 -- backgroundImage (url $ "data:image/png;base64," <> card_images card)
+
+
+{-
+ImageMagick magic:
+
+- trim the images
+- remove the white background
+
+Next time I'll tell my artist how to do that correctly initially.
+
+for i in *.png; do echo $i; convert $i -fuzz 10% -fill none -draw "color 0,0 floodfill" -fuzz 20% -trim ${i}_2.png; done;
+
+-}

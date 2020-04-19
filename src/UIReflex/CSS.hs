@@ -86,7 +86,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
     backgroundSize contain
     width (vw 6)
-    height (vw (6 / 0.62))
+    height (vw (6 / 0.81))
 
   ".card" ? do
     "transition" -: "width 1s"
