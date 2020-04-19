@@ -19,7 +19,6 @@ library
   exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo, Assets
   if(!impl(ghcjs))
     exposed-modules: Server
-  --  Server
   build-depends:       base
                      , reflex
                      , clay
@@ -42,7 +41,6 @@ library
                      , generic-lens
   if(!impl(ghcjs))
     build-depends: websockets
-  default-extensions:
 
   ghc-options: -Wall -Wno-partial-type-signatures -Wincomplete-uni-patterns
 
@@ -51,6 +49,12 @@ library
 executable ui
   main-is: app/MainUI.hs
   build-depends: base, frontend
+
+executable server
+ main-is: app/MainServer.hs
+ build-depends: base, frontend
+ if(impl(ghcjs))
+   buildable: False
 
 source-repository head
   type:     git
