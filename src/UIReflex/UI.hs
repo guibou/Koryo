@@ -34,7 +34,6 @@ import Data.Text.Encoding
 
 import Koryo
 import Data.Text (Text)
-import Assets
 import qualified Data.Set as Set
 import Data.Set (Set)
 
