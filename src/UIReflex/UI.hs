@@ -66,18 +66,18 @@ playerWidget :: MonadWidget t m => Dynamic t Game -> Dynamic t (Int -> Bool) -> 
 playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
   (_, eStealCoin) <- el' "div" $ mdo
     let
-    elClass "div" "name" $ do
+    eStealCoin <- elClass "div" "name" $ do
       dynText (Text.pack . name <$> player)
       dyn_ (ffor game $ \game -> if currentFirstPlayer game == playerNumber
                                 then do
                text " - "
-               elClass "span" "firstPlayer" $ text "Premier joueur"
+               elClass "span" "firstPlayer" $ text "Premier"
                                 else blank
               )
       dyn_ (ffor game $ \game -> if selectedPlayer game == playerNumber
                                     then do
                text " - "
-               elClass "span" "currentPlayer" $ text "Joueur actuel"
+               elClass "span" "currentPlayer" $ text "Actuel"
                                     else blank
               )
 
@@ -86,11 +86,12 @@ playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
                   let currentScore = computeScores (players game) !! playerNumber
                   in [fmt| - Score: {currentScore}|])
 
-    eStealCoin <- do
-      let enabled = ffor canStealDyn $ \canSteal -> canSteal playerNumber
+      eStealCoin <- do
+        let enabled = ffor canStealDyn $ \canSteal -> canSteal playerNumber
 
-      clickCoin <- displayCoins enabled (nbCoins <$> player)
-      pure $ gate (current enabled) (StealACoinToPlayer playerNumber <$ clickCoin)
+        clickCoin <- displayCoins enabled (nbCoins <$> player)
+        pure $ gate (current enabled) (StealACoinToPlayer playerNumber <$ clickCoin)
+      pure eStealCoin
 
     eventSelectCard <- displayCards (projectCardSelection playerNumber <$> cardSelectDyn) (board <$> player)
     pure [Right <$> eStealCoin, Left . (playerNumber,) <$> eventSelectCard]
@@ -182,10 +183,8 @@ displayHand :: forall t m. MonadWidget t m
 displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId) (traceDyn "CurrentSelection"->dCurrentSelection) majoritySelector = \case
   NothingToDo -> elClass "div" "roundedBlock" $ text "Votre tour est fini. Attendez le prochain." >> pure (never, never)
   WaitingForDestroying -> elClass "div" "roundedBlock" $ do
-    text "Phase de destruction"
-
     eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
-    eDestroyS <- switchHold never eDestroy
+    eDestroyS <- switchHoldPromptly never eDestroy
 
     pure (never, eDestroyS)
   Draw m -> do
@@ -339,7 +338,7 @@ widgetGame dPayload = mdo
 
       pure $ gate (current canTakeCoinDyn) (TakeCoinCommand <$ click)
 
-    (commandArea, selectionEvt) <- elClass "div" "gameArea" $ mdo
+    (commandArea, selectionEvt) <- elClass "div" "gameArea players" $ mdo
       (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
         e <- dyn (traceDynWith (const "displayHand") $ displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> (traceDyn "board" dBoard) <*> (traceDyn "pid" dCurrentPlayerId))) <*> (traceDyn "hand" dHand))
         let (a, b) = splitE e
@@ -348,7 +347,7 @@ widgetGame dPayload = mdo
 
         pure (a', b')
 
-      (ePlayer :: _) <- elClass "div" "players" $ do
+      (ePlayer :: _) <- do
         asList <- listDyn (players <$> dg)
 
         evts <- dyn $ do
@@ -372,7 +371,7 @@ widgetGame dPayload = mdo
         ]
 
       pure $ (leftmost [commandFromHand, eCommandFromPlayer], currentSelection)
-    pure $ (leftmost [evtStatus, commandArea], selectionEvt)
+    pure $ (leftmost [commandArea, evtStatus], selectionEvt)
   pure events
 
 displayCoins :: MonadWidget t m => Dynamic t Bool -> Dynamic t Int -> m (Event t ())
@@ -446,7 +445,7 @@ koryoMain player = elClass "div" "preload" $ mdo
     Just dg -> do
       let dCurrentPlayerId = (\(Payload _ _ i) -> i) <$> dg
       koryoCommand <- widgetGame dg
-      pure $ (current (GameCommand <$> dCurrentPlayerId) <@> koryoCommand)
+      pure $ current (GameCommand <$> dCurrentPlayerId) <@> koryoCommand
 
   eGame <- switchHold never evt
 
@@ -534,7 +533,17 @@ handDestroyor game pId
 
   (button, _) <- elDynAttr' "button" buttonStatus $ text "Valider la selection"
 
-  pure $ (current (DropCards <$> droppedCards) <@ domEvent Click button)
+
+  pb <- getPostBuild
+
+  let
+    -- Let the UI decide if you need to auto drop!
+    autoDrop = gate (current validSelection) $ DropCards Map.empty <$ pb
+
+  pure $ leftmost [
+    autoDrop,
+    current (DropCards <$> droppedCards) <@ domEvent Click button
+    ]
 
 {-
 TODOs:
@@ -549,7 +558,7 @@ My TODO:
 - tests ;)
   (Damned,
 - more robust server
-- automatic actions
+- automatic actions. Done for the drop card (by the UI ;)
 
 GAME FEATURES:
 - see the number of card drawn by others

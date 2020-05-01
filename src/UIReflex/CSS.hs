@@ -33,9 +33,12 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
   ".gameArea" ? do
     display flex
-    flexDirection column
+    -- flexDirection column
+    "flex-wrap" -: "wrap"
 
   ".players" ? do
+    display flex
+    "flex-wrap" -: "wrap"
     mempty
 
   ".firstPlayer" ? do
@@ -44,7 +47,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
   ".currentPlayer" ? do
     color red
 
-  ".players" |> "div:first-child" ? do
+  ".players" |> "div:nth-child(2)" ? do
     marginBottom (vh 5)
     borderColor green
     borderWidth (px 5)
@@ -57,6 +60,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
   ".cards" ? do
     display flex
+    "flex-wrap" -: "wrap"
 
   ".card.selected" ? do
     outlineWidth (px 5)
@@ -83,8 +87,8 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     position relative
 
     backgroundSize contain
-    width (vw 6)
-    height (vw (6 / 0.81))
+    width (vw 12)
+    height (vw (12 / 0.81))
 
   ".card" ? do
     "transition" -: "width 1s"
@@ -144,9 +148,9 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     ]
 
   keyframes "appear" [
-    (0, opacity 0 <> transform (scale 0 0)),
-    (50, opacity 100 <> transform (scale 3 3)),
-    (100, opacity 100)
+    (0, opacity 0 <> transform (scale 0 0) <> display block),
+    (50, opacity 100 <> transform (scale 3 3) <> display block),
+    (100, opacity 100 <> display block)
     ]
 
   keyframes "disappear" [
@@ -208,6 +212,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     alignItems center
     "flex-wrap" -: "wrap"
     "div" ? do
+      display none
       animation "disappear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
       opacity 0
       transform (scale 0 0)
@@ -221,6 +226,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     "div.visible" ? do
       transform (scale 1 1)
       opacity 100
+      display block
       animation "appear" (sec 0.5) linear (sec 0) (iterationCount 1) alternate forwards
 
 {-
@@ -246,3 +252,6 @@ Tentative to disable animation on load
     display none
   ".scores" ? do
     display none
+
+  ".name" ? do
+    display flex
