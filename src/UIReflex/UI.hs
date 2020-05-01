@@ -479,7 +479,7 @@ cardPicker cards pred = mdo
 
 handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
-  el "p" $ text "Selection des cartes. La ligne du haut correspond à votre pioche. La ligne du bas correspond à votre selection. Il suffit de cliquer pour passer les cartes d'une ligne à l'autre."
+  el "p" $ text "Selection des cartes."
   (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
@@ -505,7 +505,7 @@ handDestroyor game pId
   | selectedPlayer game /= pId = elDynClass "div" "roundedBlock" $ text "Phase de défausse. Attendez votre tour." >> pure never
   | otherwise = elDynClass "div" "roundedBlock" $ mdo
   let cards = view (#players . ix pId . #board) game
-  el "p" $ text "Choissizer les cartes à supprimer. La ligne du haut correspond aux cartes à conserver."
+  el "p" $ text "Choisissez les cartes à supprimer. La ligne du haut correspond aux cartes à conserver."
 
   let
     currentNbCards = nbCards <$> newHand
