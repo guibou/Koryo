@@ -80,13 +80,11 @@ playerWidget game canStealDyn cardSelectDyn (playerNumber, player) = do
                elClass "span" "currentPlayer" $ text "Joueur actuel"
                                     else blank
               )
-      {-
-       -- Score display is disabled because people must count by themself
 
-      dynText (ffor game $ \game ->
+
+      divClass "scores" $ dynText (ffor game $ \game ->
                   let currentScore = computeScores (players game) !! playerNumber
                   in [fmt| - Score: {currentScore}|])
-      -}
 
     eStealCoin <- do
       let enabled = ffor canStealDyn $ \canSteal -> canSteal playerNumber
@@ -286,15 +284,20 @@ canBeFocused board pId FlipAttack = evaluateMajorityFor C2_Ninja board /= Just p
 
 widgetGame :: forall t m. MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
 widgetGame dPayload = mdo
-  (events, selection) <- elDynClass "div" (ffor selection $ \case
-                                              NotSelecting -> ""
-                                              Selecting (SelectingFire _) -> "selecting-fire"
-                                              Selecting (SelectingFlip _) -> "selecting-flip"
-                                              ) $ mdo
-    dg <- holdUniqDyn ((\(Payload g _ _) -> g) <$> dPayload)
-    dHand <- holdUniqDyn ((\(Payload _ h _) -> h) <$> dPayload)
-    dCurrentPlayerId <- holdUniqDyn ((\(Payload _ _ i) -> i) <$> dPayload)
-    dBoard <- holdUniqDyn (map board . players <$> dg)
+  dg <- holdUniqDyn ((\(Payload g _ _) -> g) <$> dPayload)
+  dHand <- holdUniqDyn ((\(Payload _ h _) -> h) <$> dPayload)
+  dCurrentPlayerId <- holdUniqDyn ((\(Payload _ _ i) -> i) <$> dPayload)
+  dBoard <- holdUniqDyn (map board . players <$> dg)
+
+
+  (events, selection) <- elDynAttr "div" (((ffor selection $ \case
+                                              NotSelecting -> "class" =: "gameWidget"
+                                              Selecting (SelectingFire _) -> ("class" =: "gameWidget selecting-fire")
+                                              Selecting (SelectingFlip _) -> ("class" =: "gameWidget selecting-flip")
+                                              )) <> (ffor dg $ \g -> "data-current-round" =: Text.pack (show (currentRound g))))
+                                              $ mdo
+    elDynClass "div" "endOfGame" $ do
+      text "FIN DU JEU"
 
     let
       canSteal game currentPlayerHand currentPlayerId otherPlayerId =

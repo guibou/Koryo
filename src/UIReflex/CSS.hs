@@ -230,3 +230,18 @@ Tentative to disable animation on load
     "animation" -: "none !important"
 
 -}
+
+  ".gameWidget[data-current-round=\"9\"]" ? do
+    ".handle" ? do
+      display none
+    ".endOfGame" ? do
+      display block
+    ".scores" ? do
+      display block
+    ".gameStatus" ? do
+      display none
+
+  ".endOfGame" ? do
+    display none
+  ".scores" ? do
+    display none
