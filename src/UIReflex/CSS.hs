@@ -31,11 +31,9 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       borderWidth (px 1)
       borderStyle solid
 
-  ".handle" ? do
-    mempty
-
   ".gameArea" ? do
     display flex
+    flexDirection column
 
   ".players" ? do
     mempty
@@ -206,6 +204,9 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
   ".coins" ? do
     display flex
+    justifyContent center
+    alignItems center
+    "flex-wrap" -: "wrap"
     "div" ? do
       animation "disappear" (sec 1) linear (sec 0) (iterationCount 1) alternate forwards
       opacity 0

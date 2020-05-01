@@ -192,7 +192,7 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
     e <- handSelector (majoritySelector C5_TakeTwoDifferent) m
     pure (never, SelectHand <$> e)
   Selected sel -> elClass "div" "roundedBlock" $ do
-    text "Vous aves selectionné des cartes. Attendez votre tour maintenant."
+    text "Cartes selectionées:"
     void $ displayCards (constDyn mempty) (constDyn (selectionToMap sel))
     pure (never, never)
   DoActions actions -> do
@@ -340,6 +340,14 @@ widgetGame dPayload = mdo
       pure $ gate (current canTakeCoinDyn) (TakeCoinCommand <$ click)
 
     (commandArea, selectionEvt) <- elClass "div" "gameArea" $ mdo
+      (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
+        e <- dyn (traceDynWith (const "displayHand") $ displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> (traceDyn "board" dBoard) <*> (traceDyn "pid" dCurrentPlayerId))) <*> (traceDyn "hand" dHand))
+        let (a, b) = splitE e
+        a' <- switchHold never a
+        b' <- switchHold never b
+
+        pure (a', b')
+
       (ePlayer :: _) <- elClass "div" "players" $ do
         asList <- listDyn (players <$> dg)
 
@@ -355,13 +363,6 @@ widgetGame dPayload = mdo
 
         switchHold never evts
 
-      (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
-        e <- dyn (traceDynWith (const "displayHand") $ displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> (traceDyn "board" dBoard) <*> (traceDyn "pid" dCurrentPlayerId))) <*> (traceDyn "hand" dHand))
-        let (a, b) = splitE e
-        a' <- switchHold never a
-        b' <- switchHold never b
-
-        pure (a', b')
 
       let (eSelectCard, eCommandFromPlayer :: Event t KoryoCommands) = fanEither ePlayer
 
