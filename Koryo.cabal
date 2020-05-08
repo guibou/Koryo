@@ -25,6 +25,7 @@ common shared-properties
                      , random-shuffle
                      , containers
                      , lens
+                     , generic-lens
 
 library
   import: shared-properties
@@ -45,7 +46,6 @@ library
                      , aeson
                      , file-embed
                      , base64-bytestring
-                     , generic-lens
   if(!impl(ghcjs))
     build-depends: websockets
 
@@ -58,8 +58,10 @@ test-suite koryo-tests
   hs-source-dirs:      tests src
   other-modules:
                        BoardSpec
+                     , KoryoSpec
                      , Board
                      , Cards
+                     , Koryo
   build-depends:
                  hspec-expectations
                , base
