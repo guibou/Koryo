@@ -38,6 +38,7 @@ broadcastPayload stateRef = modifyMVar_ stateRef
   $ \state -> do
     putStrLn ("--------")
     print (length (clients state))
+    print (Server.game state)
 
     newClients <- forM (clients state) $ \(pId, conn) -> do
       let
