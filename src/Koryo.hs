@@ -421,7 +421,8 @@ dropCards tg' pId cards
 dropCardsForPlayer :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
 dropCardsForPlayer tg pId droppedCards
   -- Ensure that it is the right player
-  | pId == view (#game . #selectedPlayer) tg =
+  | pId == view (#game . #selectedPlayer) tg 
+  && preview (#handles . ix pId) tg == Just WaitingForDestroying =
     -- go to next player
     over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
     -- set current player to nothing to do
