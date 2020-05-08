@@ -24,15 +24,14 @@ import Reflex.Dom hiding (FireCommand)
 import qualified Data.Text as Text
 import Control.Monad (void)
 import PyF (fmt)
-import qualified Data.Map as Map
-import Data.Map (Map)
 import Data.Bool (bool)
-import Data.Maybe (fromMaybe)
 import Data.Generics.Labels()
 import Control.Lens
 import Data.Text.Encoding
 
 import Koryo
+import Cards
+import Board
 import Data.Text (Text)
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -133,11 +132,11 @@ updateSelection canBeFocused sel@(player, _) currentSel@(Selecting (SelectingFli
       | player'' == player -> Just (sel', Just sel) -- Replace selection on second player
       | otherwise -> Just (sel'', Just sel) -- Select and discard the oldest
 
-displayCards :: MonadWidget t m => Dynamic t (Set Card) -> Dynamic t (Map Card Int) -> m (Event t Card)
+displayCards :: MonadWidget t m => Dynamic t (Set Card) -> Dynamic t Board -> m (Event t Card)
 displayCards selectedCards cards = do
   selectCardEvent <- elClass "div" "cards" $ do
-    flip mapM enumerated $ \card -> do
-      let dCount = fromMaybe 0 . Map.lookup card <$> cards
+    flip mapM [minBound..maxBound] $ \card -> do
+      let dCount = Board.lookup card <$> cards
       let selected selStatus count = cls <> ("data-count" =: Text.pack (show count))
             where
               cls
@@ -277,9 +276,9 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
 data Attack = FireAttack | FlipAttack
   deriving (Show)
 
-canBeFocused :: [Map Card Int] -> Int -> Attack -> Bool
+canBeFocused :: [Board] -> Int -> Attack -> Bool
 canBeFocused board pId FireAttack = evaluateMajorityFor C7_Warrior board /= Just pId
-canBeFocused board pId FlipAttack = evaluateMajorityFor C2_Ninja board /= Just pId || fromMaybe 0 (Map.lookup C7_Warrior (board !! pId)) /= 0
+canBeFocused board pId FlipAttack = evaluateMajorityFor C2_Ninja board /= Just pId || Board.lookup C7_Warrior (board !! pId) /= 0
 
 widgetGame :: forall t m. MonadWidget t m => Dynamic t Payload -> m (Event t KoryoCommands)
 widgetGame dPayload = mdo
@@ -451,19 +450,23 @@ koryoMain player = elClass "div" "preload" $ mdo
 
   pure ()
 
-cardPicker :: _ => Map Card Int
+cardPicker :: _ => Board
            -> (Card -> Bool)
-           -> m (Dynamic t (Map Card Int), Dynamic t (Map Card Int))
+           -> m (Dynamic t Board, Dynamic t Board)
 cardPicker cards pred = mdo
-  currentSelection <- foldDyn (\(c, v) m -> Map.insertWith (+) c v m)  Map.empty (leftmost [
-                                                                                     (, 1) <$> eSelect,
-                                                                                     (\c -> (c, -1)) <$> eUnselect
-                                                                                     ])
+  let
+    addCard c = (<> Board.singleton c)
+    dropCard c = (`Board.difference` Board.singleton c)
 
-  currentNotSelected <- foldDyn (\(c, v) m -> Map.insertWith (+) c v m)  cards (leftmost [
-                                                                                   (\c -> (c, -1)) <$> eSelect,
-                                                                                   (,1) <$> eUnselect
-                                                                                   ])
+  currentSelection <- foldDyn ($) mempty (leftmost [
+                                             addCard <$> eSelect,
+                                             dropCard <$> eUnselect
+                                             ])
+
+  currentNotSelected <- foldDyn ($) cards (leftmost [
+                                              dropCard <$> eSelect,
+                                              addCard <$> eUnselect
+                                              ])
 
   eSelectNotFiltered :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
   let eSelect = ffilter pred eSelectNotFiltered
@@ -472,7 +475,7 @@ cardPicker cards pred = mdo
 
   pure (currentSelection, currentNotSelected)
 
-handSelector :: MonadWidget t m => Bool -> Map Card Int -> m (Event t SelectedFromDraw)
+handSelector :: MonadWidget t m => Bool -> Board -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
   el "p" $ text "Selection des cartes."
   (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
@@ -480,7 +483,7 @@ handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
         -- Shrink the card list out of the 0 values
-        case Map.toList (Map.filter (/=0) m) of
+        case Board.toList m of
           [(c, n)] -> Just $ SelectMany c n
           [(c, 1), (c', 1)] -> Just $ SelectTwo c c'
           _ -> Nothing
@@ -533,7 +536,7 @@ handDestroyor game pId
 
   let
     -- Let the UI decide if you need to auto drop!
-    autoDrop = gate (current validSelection) $ DropCards Map.empty <$ pb
+    autoDrop = gate (current validSelection) $ DropCards mempty <$ pb
 
   pure $ leftmost [
     autoDrop,

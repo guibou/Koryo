@@ -6,12 +6,10 @@ import Prelude hiding (div, span)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Encoding (encodeUtf8)
 import Clay
-import Koryo
 import Assets
 import Data.String
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-
 
 css :: Text -> ByteString
 css hostname = (encodeUtf8 . toStrict . render) $ do
@@ -193,7 +191,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       backgroundColor purple
       color white
 
-  flip mapM_ enumerated $ \card -> do
+  flip mapM_ [minBound..maxBound] $ \card -> do
     ".cards" ? (fromString $ "." <> show card) ? do
       backgroundImage (url $ card_url hostname card)
 

@@ -17,7 +17,6 @@ import GHC.Generics
 import Control.Exception (try, SomeException)
 import Data.Maybe (catMaybes)
 import System.Random
-import qualified Data.Map as Map
 
 import qualified Network.WebSockets as WS
 

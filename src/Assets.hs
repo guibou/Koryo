@@ -5,7 +5,7 @@
 module Assets where
 
 import Data.Text (Text)
-import Koryo
+import Cards
 
 card_path :: Card -> Text
 card_path = \case

@@ -11,53 +11,19 @@
 module Koryo where
 
 import qualified Data.Map as Map
-import Data.Map (Map)
 import System.Random
-import System.Random.Shuffle
 import Data.List (find)
 import Data.Maybe (fromMaybe,catMaybes,fromJust)
 import Test.Hspec
 import Data.Bool (bool)
-import Test.QuickCheck
-import Control.Lens (view, set, over, at, ix, preview, (^?))
+import Control.Lens (view, set, over, ix, preview, (^?))
 import Data.Aeson
 import GHC.Generics
-import Control.Monad (replicateM)
 import Data.Generics.Labels()
 
-data Card
-  = C1_GivePrio
-  | C2_Ninja
-  | C3_SaveTwoCards
-  | C4_KillMinusOne
-  | C5_TakeTwoDifferent
-  | C6_Bank
-  | C7_Warrior
-  | C8_DrawTwoMore
-  | C9_DoNothing
-  | Cm1_KillOne
-  | Cm1_FlipTwo
-  deriving (Show, Bounded, Enum, Ord, Eq, Generic, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
-
-enumerated :: (Bounded t, Enum t) => [t]
-enumerated = [minBound..maxBound]
-
-cardCount :: Card -> Int
-cardCount = \case
-  C1_GivePrio -> 1
-  C2_Ninja -> 2
-  C3_SaveTwoCards -> 3
-  C4_KillMinusOne -> 4
-  C5_TakeTwoDifferent -> 5
-  C6_Bank -> 6
-  C7_Warrior -> 7
-  C8_DrawTwoMore -> 8
-  C9_DoNothing -> 9
-  Cm1_KillOne -> 6
-  Cm1_FlipTwo -> 4
-
-allCards :: Map Card Int
-allCards = Map.fromList (map (\c -> (c, cardCount c)) enumerated)
+import Cards
+import Board (Board)
+import qualified Board
 
 data SelectedFromDraw
   = SelectMany Card Int
@@ -67,13 +33,16 @@ data SelectedFromDraw
 data Player = Player
   {
     name :: String,
-    board :: Map Card Int,
+    board :: Board,
     nbCoins :: Int
   }
   deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
+newtype PlayerId = PlayerId Int
+  deriving (Show, Generic, ToJSON, FromJSON, Eq)
+
 data Hand
-  = Draw (Map Card Int)
+  = Draw Board
   | Selected SelectedFromDraw
   | DoActions Actions
   | NothingToDo
@@ -111,9 +80,6 @@ data TopLevelGame = TopLevelGame
   }
   deriving (Show, Generic)
 
-nbCards :: Map Card Int -> Int
-nbCards = sum . Map.elems
-
 startGame :: StdGen -> TopLevelGame
 startGame gen = TopLevelGame {
   game = Game {
@@ -142,7 +108,7 @@ addPlayer :: String -> Game -> Game
 addPlayer playerName game = game { players = (newPlayer playerName) : players game }
 
 newPlayer :: String -> Player
-newPlayer playerName = Player {name = playerName, board = Map.empty, nbCoins = 0}
+newPlayer playerName = Player {name = playerName, board = mempty, nbCoins = 0}
 
 {-
 B) Playing
@@ -159,13 +125,13 @@ cardsDrawAtRound roundNumber = 11 - roundNumber
 cardsOnBoardAtRound :: Int -> Int
 cardsOnBoardAtRound roundNumber = roundNumber + 2
 
-hasTheOne :: Map Card Int -> Bool
-hasTheOne cards = fromMaybe 0 (Map.lookup C1_GivePrio cards) == 1
+hasTheOne :: Board -> Bool
+hasTheOne cards = Board.lookup C1_GivePrio cards == 1
 
-evaluateMajorityFor :: Card -> [Map Card Int] -> Maybe Int
+evaluateMajorityFor :: Card -> [Board] -> Maybe Int
 evaluateMajorityFor card decks = let
   playerWithOne = fst <$> find (hasTheOne . snd) (zip [0..] decks)
-  cardsCountPerPlayer = map (fromMaybe 0 . Map.lookup card) decks
+  cardsCountPerPlayer = map (Board.lookup card) decks
 
   maximumCardCount = maximum cardsCountPerPlayer
 
@@ -185,17 +151,17 @@ evaluateMajorityFor card decks = let
 -- TODO: corriger le compte du 1 pour le score
 computeScores :: [Player] -> [Int]
 computeScores players = let
-  majoritiesFor = map (\c -> evaluateMajorityFor c (map (over (at C1_GivePrio) (const $ Just 0)) . map board $ players)) [C1_GivePrio .. C9_DoNothing]
+  majoritiesFor = map (\c -> evaluateMajorityFor c (map (set (Board.cardAt C1_GivePrio) 0) . map board $ players)) [C1_GivePrio .. C9_DoNothing]
   penalities = map countPenalities players
   coins = map nbCoins players
 
-  bonusFor1 = map (fromMaybe 0 . Map.lookup C1_GivePrio) (map board players)
+  bonusFor1 = map (Board.lookup C1_GivePrio) (map board players)
   scores = Map.fromListWith (+) $ catMaybes $ zipWith (\playerM points -> (,points) <$> playerM)  majoritiesFor [1..9]
 
   in zipWith (+) bonusFor1 $ zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) $ zipWith (+) coins penalities
 
 countPenalities :: Player -> Int
-countPenalities player = - (fromMaybe 0 (Map.lookup Cm1_KillOne (board player)) + fromMaybe 0 (Map.lookup Cm1_FlipTwo (board player)))
+countPenalities player = - (Board.lookup Cm1_KillOne (board player)) + Board.lookup Cm1_FlipTwo (board player)
 
 {-
 i) Drawing phase
@@ -203,8 +169,8 @@ i) Drawing phase
    - First the game randomises card for each players (power 8)
 -}
 
-availableCards :: Game -> Map Card Int
-availableCards game = Map.unionWith (-) allCards $ Map.unionsWith (+) (fmap board (players game))
+availableCards :: Game -> Board
+availableCards game = Board.allCards `Board.difference ` (foldMap board (players game))
 
 drawPhase :: TopLevelGame -> TopLevelGame
 drawPhase TopLevelGame{game, randomGenerator} = let
@@ -223,12 +189,12 @@ drawPhase TopLevelGame{game, randomGenerator} = let
 
 drawCards ::
                    Int
-                   -> (StdGen, [Map Card Int], Map Card Int)
-                   -> (StdGen, [Map Card Int], Map Card Int)
+                   -> (StdGen, [Board], Board)
+                   -> (StdGen, [Board], Board)
 drawCards count (gen, acc, availablesCards) =
   let
-    (draw, gen') = weightedPickMap availablesCards count gen
-  in (gen', draw:acc, Map.unionWith (-) availablesCards draw)
+    (draw, gen') = Board.weightedPickMap availablesCards count gen
+  in (gen', draw:acc, availablesCards `Board.difference` draw)
 
 
 {-
@@ -250,10 +216,10 @@ ii) Playing phase
 -}
 
 
-selectionToMap :: SelectedFromDraw -> Map Card Int
+selectionToMap :: SelectedFromDraw -> Board
 selectionToMap sel = case sel of
-  SelectMany c i -> Map.singleton c i
-  SelectTwo c c' -> Map.fromListWith (+) [(c, 1), (c', 1)]
+  SelectMany c i -> foldMap Board.singleton (replicate i c)
+  SelectTwo c c' -> Board.singleton c <> Board.singleton c'
 
 
 revealPlayer :: SelectedFromDraw -> Player -> (Player, Actions)
@@ -263,13 +229,13 @@ revealPlayer handle player = let
     takeCoin = True,
     stealCoin = True,
     destroyCard = True,
-    flipAction = fromMaybe 0 (Map.lookup Cm1_FlipTwo newCards),
-    kill = fromMaybe 0 (Map.lookup Cm1_KillOne newCards)
+    flipAction = Board.lookup Cm1_FlipTwo newCards,
+    kill = Board.lookup Cm1_KillOne newCards
     }
 
 
   in (player {
-     board = Map.unionWith (+) (board player) newCards
+     board = board player <> newCards
      }, actions)
 
 {-
@@ -365,13 +331,13 @@ destroyAPersonalCard tg playerId
   -- Ensure player can destroy its card
   | preview (#handles . ix playerId . #_DoActions . #destroyCard) tg == Just False = tg
   -- Destroy a KillOne
-  | Just n <- Map.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
+  | let n = Board.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
-                over (#game . #players . ix playerId . #board) (Map.insert Cm1_KillOne (n - 1)) $ tg
+                over (#game . #players . ix playerId . #board) (`Board.difference` Board.singleton Cm1_KillOne) $ tg
   -- Destroy a FlipTwo
-  | Just n <- Map.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
+  | let n = Board.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
-                over (#game . #players . ix playerId . #board) (Map.insert Cm1_FlipTwo (n - 1)) tg
+                over (#game . #players . ix playerId . #board) (`Board.difference` Board.singleton Cm1_FlipTwo) tg
   | otherwise = set (#handles . ix playerId . #_DoActions . #destroyCard) False tg
 
 stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
@@ -391,7 +357,7 @@ fireCommand tg currentPlayerId (targetId, card)
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #kill) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (Map.insertWith (+) card (-1)) $
+    over (#game . #players . ix targetId . #board) (`Board.difference` Board.singleton card) $
     over (#handles . ix currentPlayerId . #_DoActions . #kill) (subtract 1) $ tg
   | otherwise = tg
 
@@ -401,13 +367,13 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card')
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #flipAction) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (Map.unionWith (+) (Map.fromListWith (+) [(card, (-1)), (card', 1)])) $
-    over (#game . #players . ix targetId' . #board) (Map.unionWith (+) (Map.fromListWith (+) [(card', (-1)), (card, 1)])) $
+    over (#game . #players . ix targetId . #board) (\b -> b <> Board.singleton card' `Board.difference` Board.singleton card) $
+    over (#game . #players . ix targetId' . #board) (\b -> b <> Board.singleton card `Board.difference` Board.singleton card') $
     over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
   | otherwise = tg
 
 
-dropCards :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
+dropCards :: TopLevelGame -> Int -> Board -> TopLevelGame
 dropCards tg' pId cards
   | view (#game . #selectedPlayer) tg == view (#game . #currentFirstPlayer) tg = drawPhase (tg {
                                                                                             game = nextRound (game tg)
@@ -418,30 +384,18 @@ dropCards tg' pId cards
         tg = dropCardsForPlayer tg' pId cards
 
 -- idempotent
-dropCardsForPlayer :: TopLevelGame -> Int -> Map Card Int -> TopLevelGame
+dropCardsForPlayer :: TopLevelGame -> Int -> Board -> TopLevelGame
 dropCardsForPlayer tg pId droppedCards
   -- Ensure that it is the right player
-  | pId == view (#game . #selectedPlayer) tg 
+  | pId == view (#game . #selectedPlayer) tg
   && preview (#handles . ix pId) tg == Just WaitingForDestroying =
     -- go to next player
     over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
     -- set current player to nothing to do
     set (#handles . ix pId) NothingToDo $
     -- remove his cards
-    over (#game . #players . ix pId . #board) (flip (Map.unionWith (-)) droppedCards) $ tg
+    over (#game . #players . ix pId . #board) (flip Board.difference droppedCards) $ tg
   | otherwise = tg
-
--- * Random sampling primitive
-
-weightedPickMap :: Map Card Int -> Int -> StdGen -> (Map Card Int, StdGen)
-weightedPickMap currentMap n gen =
-  let
-    listOfValues = concatMap (\(c, count) -> replicate count c) $ Map.toList currentMap
-    (genA, genB) = split gen
-    shuffled = take n $ shuffle' listOfValues (length listOfValues) genA
-
-  in (Map.fromListWith (+) (map (,1) shuffled), genB)
-
 
 -- * Tests
 spec :: SpecWith ()
@@ -449,38 +403,38 @@ spec = do
   describe "majority" $ do
     describe "no 1" $ do
       it "no majority for equality" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` Nothing
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` Nothing
       it "majority" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
     describe "with 1" $ do
       it "majority for bigger" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` Just 0
       it "majority for equal" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` Just 1
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` Just 1
       it "majority for bigger" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` Just 1
       it "no majority for zero" $ do
-       evaluateMajorityFor C5_TakeTwoDifferent [Map.fromList [(C5_TakeTwoDifferent, 0)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` Nothing
+       evaluateMajorityFor C5_TakeTwoDifferent [Board.fromList [(C5_TakeTwoDifferent, 0)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` Nothing
 
   describe "score" $ do
     let testScore bs = computeScores (map (\b -> Player {nbCoins = 0, board = b}) bs)
 
     describe "no 1" $ do
       it "no majority" $ do
-        testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 0]
+        testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 0]
       it "majority" $ do
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 5]
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 0]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 5]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 0]
     describe "with 1" $ do
       it "majority for bigger" $ do
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 1]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 1)]] `shouldBe` [5, 1]
       it "majority for equal" $ do
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 1]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 2)]] `shouldBe` [0, 1]
       it "majority for bigger" $ do
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 2)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 6]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 6]
       it "no majority for zero" $ do
-       testScore [Map.fromList [(C5_TakeTwoDifferent, 0)], Map.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` [0, 1]
+       testScore [Board.fromList [(C5_TakeTwoDifferent, 0)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` [0, 1]
 
 {-
   describe "flip" $ do
@@ -501,7 +455,7 @@ data KoryoCommands
   | StealACoinToPlayer Int
   | FireCommand (Int, Card)
   | FlipCommand (Int, Card) (Int, Card)
-  | DropCards (Map Card Int)
+  | DropCards Board
   deriving (ToJSON, FromJSON, Generic, Show)
 
 data RemoteCommand
@@ -529,12 +483,3 @@ data Payload = Payload Game Hand Int
 -- OK. 9: handled (only for score)
 -- OK: -1 black (will work with 2)
 -- OK: -1 red (will work with 7)
-
-genHand :: Gen (Map Card Int)
-genHand = do
-  l <- replicateM 10 $ do
-    c <- elements enumerated
-    Positive n <- arbitrary
-
-    pure (c, n)
-  pure $ Map.fromListWith (+) l
