@@ -95,13 +95,18 @@ application stateRef pending = do
 executeCommand :: Int
                         -> KoryoCommands -> TopLevelGame -> TopLevelGame
 executeCommand pId command game = case command of
+  -- Draw phase
   SelectHand s -> attemptRevealPhase $ selectCard pId s game
+
+  -- Action Phase
   EndTurn -> endPlayerTurn pId game
   TakeCoinCommand -> takeCoinInTheBank game pId
   DestroyCardCommand -> destroyAPersonalCard game pId
   StealACoinToPlayer i -> stealACoinToPlayer game pId i
   FireCommand c -> fireCommand game pId c
   FlipCommand c c' -> flipCommand game pId c c'
+
+  -- Drop phase
   DropCards dp -> dropCards game pId dp
 
 instance WS.WebSocketsData (Maybe RemoteCommand) where

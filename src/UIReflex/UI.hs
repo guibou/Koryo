@@ -396,15 +396,10 @@ widgetBurger card val = do
                            EQ -> "eq visible"
                            GT -> "gt") <$> val) $ el "span" $ text (Text.pack $ show i)
 
-runUIDeveloper :: IO ()
-runUIDeveloper = mainWidgetWithHead koryoHead $ do
-  el "table" $ do
-    el "tr" $ do
-      el "td" $ koryoMain (Just "Guillaume")
-      el "td" $ koryoMain (Just "Cyrielle")
-    el "tr" $ do
-      el "td" $ koryoMain (Just "Mauricio")
-      el "td" $ koryoMain (Just "Hélène")
+runUIDeveloper :: [String] -> IO ()
+runUIDeveloper names = mainWidgetWithHead koryoHead $ do
+  flip mapM_ names $ \name -> do
+    el "div" $ koryoMain (Just name)
 
 runUI :: Maybe String -> IO ()
 runUI p = mainWidgetWithHead koryoHead (koryoMain p)
