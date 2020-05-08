@@ -1,6 +1,8 @@
 module KoryoSpec where
 
 import Test.Hspec
+import Test.QuickCheck
+
 import Board
 import Cards
 import Koryo
@@ -43,6 +45,11 @@ spec = do
        testScore [Board.fromList [(C5_TakeTwoDifferent, 2)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 3)]] `shouldBe` [0, 6]
       it "no majority for zero" $ do
        testScore [Board.fromList [(C5_TakeTwoDifferent, 0)], Board.fromList [(C1_GivePrio, 1), (C5_TakeTwoDifferent, 0)]] `shouldBe` [0, 1]
+
+    describe "penality" $ do
+      it "fine" $ do
+        property $ \x y -> testScore [Board.fromList [(Cm1_KillOne, x), (Cm1_FlipTwo, y)]] `shouldBe` [-(x + y)]
+
 
 {-
   describe "flip" $ do

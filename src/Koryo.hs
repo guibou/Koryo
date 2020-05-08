@@ -161,7 +161,7 @@ computeScores players = let
   in zipWith (+) bonusFor1 $ zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) $ zipWith (+) coins penalities
 
 countPenalities :: Player -> Int
-countPenalities player = - (Board.lookup Cm1_KillOne (board player)) + Board.lookup Cm1_FlipTwo (board player)
+countPenalities player = negate $ Board.lookup Cm1_KillOne (board player) + Board.lookup Cm1_FlipTwo (board player)
 
 {-
 i) Drawing phase
