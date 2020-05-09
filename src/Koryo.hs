@@ -12,7 +12,7 @@ module Koryo where
 
 import qualified Data.Map as Map
 import System.Random
-import Data.List (find)
+import Data.List (find, genericReplicate)
 import Data.Maybe (fromMaybe,catMaybes,fromJust)
 import Test.Hspec
 import Data.Bool (bool)
@@ -20,13 +20,14 @@ import Control.Lens (view, set, over, ix, preview, (^?))
 import Data.Aeson
 import GHC.Generics
 import Data.Generics.Labels()
+import Numeric.Natural
 
 import Cards
 import Board (Board)
 import qualified Board
 
 data SelectedFromDraw
-  = SelectMany Card Int
+  = SelectMany Card Natural
   | SelectTwo Card Card
   deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
@@ -34,7 +35,7 @@ data Player = Player
   {
     name :: String,
     board :: Board,
-    nbCoins :: Int
+    nbCoins :: Natural
   }
   deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
@@ -50,8 +51,8 @@ data Hand
   deriving (Show, Generic, ToJSON, FromJSON, Eq)
 
 data Actions = Actions {
-  flipAction :: Int, -- Action of the black -1. Must select
-  kill :: Int, -- Action of the red -1. Must select.
+  flipAction :: Natural, -- Action of the black -1. Must select
+  kill :: Natural, -- Action of the red -1. Must select.
   takeCoin :: Bool, -- Action of the 6. Can be automated
   stealCoin :: Bool, -- Action of the 2. Must select.
   destroyCard :: Bool -- Action of the 4. Can be automated
@@ -61,8 +62,8 @@ data Actions = Actions {
 data Game = Game
   {
     players :: [Player],
-    currentRound :: Int,
-    availableCoins :: Int,
+    currentRound :: Natural,
+    availableCoins :: Natural,
     currentFirstPlayer :: Int,
     selectedPlayer :: Int,
     phase :: Phase
@@ -119,10 +120,10 @@ We are in a round N
 -}
 
 -- * Round things
-cardsDrawAtRound :: Int -> Int
+cardsDrawAtRound :: Natural -> Natural
 cardsDrawAtRound roundNumber = 11 - roundNumber
 
-cardsOnBoardAtRound :: Int -> Int
+cardsOnBoardAtRound :: Natural -> Natural
 cardsOnBoardAtRound roundNumber = roundNumber + 2
 
 hasTheOne :: Board -> Bool
@@ -158,10 +159,11 @@ computeScores players = let
   bonusFor1 = map (Board.lookup C1_GivePrio) (map board players)
   scores = Map.fromListWith (+) $ catMaybes $ zipWith (\playerM points -> (,points) <$> playerM)  majoritiesFor [1..9]
 
-  in zipWith (+) bonusFor1 $ zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) $ zipWith (+) coins penalities
+  rawScore = zipWith (+) bonusFor1 $ zipWith (+) (map (\pIdx -> fromMaybe 0 (Map.lookup pIdx scores)) [0..length players-1]) coins
+  in zipWith (\x p -> fromIntegral x - fromIntegral p) rawScore penalities
 
-countPenalities :: Player -> Int
-countPenalities player = negate $ Board.lookup Cm1_KillOne (board player) + Board.lookup Cm1_FlipTwo (board player)
+countPenalities :: Player -> Natural
+countPenalities player = Board.lookup Cm1_KillOne (board player) + Board.lookup Cm1_FlipTwo (board player)
 
 {-
 i) Drawing phase
@@ -188,7 +190,7 @@ drawPhase TopLevelGame{game, randomGenerator} = let
     }
 
 drawCards ::
-                   Int
+                   Natural
                    -> (StdGen, [Board], Board)
                    -> (StdGen, [Board], Board)
 drawCards count (gen, acc, availablesCards) =
@@ -218,7 +220,7 @@ ii) Playing phase
 
 selectionToMap :: SelectedFromDraw -> Board
 selectionToMap sel = case sel of
-  SelectMany c i -> foldMap Board.singleton (replicate i c)
+  SelectMany c i -> foldMap Board.singleton (genericReplicate i c)
   SelectTwo c c' -> Board.singleton c <> Board.singleton c'
 
 

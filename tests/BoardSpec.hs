@@ -7,6 +7,8 @@ import Control.Monad (replicateM)
 import Prelude hiding (lookup)
 import Control.Lens (view, set)
 
+import Test.QuickCheck.Instances.Natural ()
+
 import Board
 import Cards
 
@@ -19,7 +21,7 @@ genHand :: Gen Board
 genHand = do
   l <- replicateM 10 $ do
     c <- elements [minBound..maxBound]
-    Positive n <- arbitrary
+    n <- arbitrary
 
     pure (c, n)
   pure $ Board.fromList l

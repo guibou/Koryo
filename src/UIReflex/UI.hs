@@ -28,6 +28,7 @@ import Data.Bool (bool)
 import Data.Generics.Labels()
 import Control.Lens
 import Data.Text.Encoding
+import GHC.Natural
 
 import Koryo
 import Cards
@@ -373,7 +374,7 @@ widgetGame dPayload = mdo
     pure $ (leftmost [commandArea, evtStatus], selectionEvt)
   pure events
 
-displayCoins :: MonadWidget t m => Dynamic t Bool -> Dynamic t Int -> m (Event t ())
+displayCoins :: MonadWidget t m => Dynamic t Bool -> Dynamic t Natural -> m (Event t ())
 displayCoins canPick currentCount = do
   (w, _) <- elDynClass' "div" (bool "coins" "coins canSteal" <$> canPick) $ flip mapM_ [1..8] $ \c -> do
     let
@@ -385,7 +386,7 @@ displayCoins canPick currentCount = do
 
   pure $ domEvent Click w
 
-widgetBurger :: MonadWidget t m => Card -> Dynamic t Int -> m ()
+widgetBurger :: MonadWidget t m => Card -> Dynamic t Natural -> m ()
 widgetBurger card val = do
   void $ elDynAttr "div" ((\c -> "class" =: "burger" <> "data-count" =: Text.pack (show c)) <$> val) $ do
     let cc = cardCount card

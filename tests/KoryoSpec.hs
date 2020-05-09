@@ -7,6 +7,8 @@ import Board
 import Cards
 import Koryo
 
+import Test.QuickCheck.Instances.Natural ()
+
 -- * Tests
 spec :: SpecWith ()
 spec = do
@@ -48,7 +50,7 @@ spec = do
 
     describe "penality" $ do
       it "fine" $ do
-        property $ \x y -> testScore [Board.fromList [(Cm1_KillOne, x), (Cm1_FlipTwo, y)]] `shouldBe` [-(x + y)]
+        property $ \x y -> testScore [Board.fromList [(Cm1_KillOne, x), (Cm1_FlipTwo, y)]] `shouldBe` [-(fromIntegral (x + y))]
 
 
 {-

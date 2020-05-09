@@ -5,6 +5,7 @@ module Cards where
 
 import GHC.Generics
 import Data.Aeson
+import Numeric.Natural
 
 -- | All the card type from the game.
 data Card
@@ -22,7 +23,7 @@ data Card
   deriving (Show, Bounded, Enum, Ord, Eq, Generic, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 -- | Return the number of card in the game
-cardCount :: Card -> Int
+cardCount :: Card -> Natural
 cardCount = \case
   C1_GivePrio -> 1
   C2_Ninja -> 2
