@@ -184,7 +184,7 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
   NothingToDo -> elClass "div" "roundedBlock" $ text "Votre tour est fini. Attendez le prochain." >> pure (never, never)
   WaitingForDestroying -> elClass "div" "roundedBlock" $ do
     eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
-    eDestroyS <- switchHoldPromptly never eDestroy
+    eDestroyS <- switchHold never eDestroy
 
     pure (never, eDestroyS)
   Draw m -> do
@@ -530,17 +530,7 @@ handDestroyor game pId
 
   (button, _) <- elDynAttr' "button" buttonStatus $ text "Valider la selection"
 
-
-  pb <- getPostBuild
-
-  let
-    -- Let the UI decide if you need to auto drop!
-    autoDrop = gate (current validSelection) $ DropCards mempty <$ pb
-
-  pure $ leftmost [
-    autoDrop,
-    current (DropCards <$> droppedCards) <@ domEvent Click button
-    ]
+  pure $ current (DropCards <$> droppedCards) <@ domEvent Click button
 
 {-
 TODOs:
