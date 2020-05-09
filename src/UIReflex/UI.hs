@@ -453,7 +453,7 @@ koryoMain player = elClass "div" "preload" $ mdo
 
 cardPicker :: _ => Board
            -> (Card -> Bool)
-           -> m (Dynamic t Board, Dynamic t Board)
+           -> m (Dynamic t Board)
 cardPicker cards pred = mdo
   let
     addCard c = (<> Board.singleton c)
@@ -464,22 +464,19 @@ cardPicker cards pred = mdo
                                              dropCard <$> eUnselect
                                              ])
 
-  currentNotSelected <- foldDyn ($) cards (leftmost [
-                                              dropCard <$> eSelect,
-                                              addCard <$> eUnselect
-                                              ])
+  let currentNotSelected = (cards `Board.difference`) <$> currentSelection
 
   eSelectNotFiltered :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
   let eSelect = ffilter pred eSelectNotFiltered
   text "<->"
   eUnselect :: Event t Card <- displayCards (constDyn mempty) currentSelection
 
-  pure (currentSelection, currentNotSelected)
+  pure currentSelection
 
 handSelector :: MonadWidget t m => Bool -> Board -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
   el "p" $ text "Selection des cartes."
-  (currentSelection, _currentNotSelected) <- cardPicker cards (const True)
+  currentSelection <- cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
@@ -521,7 +518,8 @@ handDestroyor game pId
     text "Vous pouvez en conserver : "
     display maxCardForMe
 
-  (droppedCards, newHand) <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
+  droppedCards <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
+  let newHand = (cards `Board.difference`) <$> droppedCards
 
   let
     -- TODO: check that we cannot be blocked because too much -1
