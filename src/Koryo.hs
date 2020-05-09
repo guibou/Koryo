@@ -14,7 +14,6 @@ import qualified Data.Map as Map
 import System.Random
 import Data.List (find, genericReplicate)
 import Data.Maybe (fromMaybe,catMaybes,fromJust)
-import Test.Hspec
 import Data.Bool (bool)
 import Control.Lens (view, set, over, ix, preview, (^?))
 import Data.Aeson
@@ -248,7 +247,7 @@ C) End of game
 -}
 
 -- Idempotent
-attemptRevealPhase :: HasCallStack => TopLevelGame -> TopLevelGame
+attemptRevealPhase :: TopLevelGame -> TopLevelGame
 attemptRevealPhase tg@TopLevelGame{game, handles} = case areAllSelected handles of
   Nothing -> tg
   Just newCards -> let
@@ -292,7 +291,7 @@ destroyingPhase tg = tg
    }
 
 -- idempotent
-endPlayerTurn :: HasCallStack => Int -> TopLevelGame -> TopLevelGame
+endPlayerTurn :: Int -> TopLevelGame -> TopLevelGame
 endPlayerTurn pId tg
   -- Ensure that the current player is the right one
   | view (#game . #selectedPlayer) tg /= pId = tg
