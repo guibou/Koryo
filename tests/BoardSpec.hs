@@ -50,9 +50,9 @@ spec = do
     it "preserve lookup" $ do
       property $ \a b c -> lookup c a + lookup c b === lookup c (a <> b)
 
-  describe "difference" $ do
+  describe "unsafeDifference" $ do
     it "distribute" $ do
-      property $ \a b -> (a <> b) `difference` b === a
+      property $ \a b -> (a <> b) `unsafeDifference` b === a
 
   describe "lens" $ do
     it "view" $ do

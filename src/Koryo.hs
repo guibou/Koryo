@@ -171,7 +171,7 @@ i) Drawing phase
 -}
 
 availableCards :: Game -> Board
-availableCards game = Board.allCards `Board.difference` (foldMap board (players game))
+availableCards game = Board.allCards `Board.unsafeDifference` (foldMap board (players game))
 
 drawPhase :: TopLevelGame -> TopLevelGame
 drawPhase TopLevelGame{game, randomGenerator} = let
@@ -195,7 +195,7 @@ drawCards ::
 drawCards count (gen, acc, availablesCards) =
   let
     (draw, gen') = Board.weightedPickMap availablesCards count gen
-  in (gen', draw:acc, availablesCards `Board.difference` draw)
+  in (gen', draw:acc, availablesCards `Board.unsafeDifference` draw)
 
 
 {-
@@ -334,11 +334,11 @@ destroyAPersonalCard tg playerId
   -- Destroy a KillOne
   | let n = Board.lookup Cm1_KillOne . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
-                over (#game . #players . ix playerId . #board) (`Board.difference` Board.singleton Cm1_KillOne) $ tg
+                over (#game . #players . ix playerId . #board) (`Board.unsafeDifference` Board.singleton Cm1_KillOne) $ tg
   -- Destroy a FlipTwo
   | let n = Board.lookup Cm1_FlipTwo . board . (!! playerId) . players . game $ tg
   , n > 0 = set (#handles . ix playerId . #_DoActions . #destroyCard) False $
-                over (#game . #players . ix playerId . #board) (`Board.difference` Board.singleton Cm1_FlipTwo) tg
+                over (#game . #players . ix playerId . #board) (`Board.unsafeDifference` Board.singleton Cm1_FlipTwo) tg
   | otherwise = set (#handles . ix playerId . #_DoActions . #destroyCard) False tg
 
 stealACoinToPlayer :: TopLevelGame -> Int -> Int -> TopLevelGame
@@ -358,7 +358,7 @@ fireCommand tg currentPlayerId (targetId, card)
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #kill) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (`Board.difference` Board.singleton card) $
+    over (#game . #players . ix targetId . #board) (`Board.unsafeDifference` Board.singleton card) $
     over (#handles . ix currentPlayerId . #_DoActions . #kill) (subtract 1) $ tg
   | otherwise = tg
 
@@ -368,8 +368,8 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card')
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #flipAction) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (\b -> (b <> Board.singleton card') `Board.difference` Board.singleton card) $
-    over (#game . #players . ix targetId' . #board) (\b -> (b <> Board.singleton card) `Board.difference` Board.singleton card') $
+    over (#game . #players . ix targetId . #board) (\b -> (b <> Board.singleton card') `Board.unsafeDifference` Board.singleton card) $
+    over (#game . #players . ix targetId' . #board) (\b -> (b <> Board.singleton card) `Board.unsafeDifference` Board.singleton card') $
     over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
   | otherwise = tg
 
@@ -395,7 +395,7 @@ dropCardsForPlayer tg pId droppedCards
     -- set current player to nothing to do
     set (#handles . ix pId) NothingToDo $
     -- remove his cards
-    over (#game . #players . ix pId . #board) (flip Board.difference droppedCards) $ tg
+    over (#game . #players . ix pId . #board) (flip Board.unsafeDifference droppedCards) $ tg
   | otherwise = Nothing
 
 

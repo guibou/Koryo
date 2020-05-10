@@ -457,14 +457,14 @@ cardPicker :: _ => Board
 cardPicker cards pred = mdo
   let
     addCard c = (<> Board.singleton c)
-    dropCard c = (`Board.difference` Board.singleton c)
+    dropCard c = (`Board.unsafeDifference` Board.singleton c)
 
   currentSelection <- foldDyn ($) mempty (leftmost [
                                              addCard <$> eSelect,
                                              dropCard <$> eUnselect
                                              ])
 
-  let currentNotSelected = (cards `Board.difference`) <$> currentSelection
+  let currentNotSelected = (cards `Board.unsafeDifference`) <$> currentSelection
 
   eSelectNotFiltered :: Event t Card <- displayCards (constDyn mempty) currentNotSelected
   let eSelect = ffilter pred eSelectNotFiltered
@@ -519,7 +519,7 @@ handDestroyor game pId
     display maxCardForMe
 
   droppedCards <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
-  let newHand = (cards `Board.difference`) <$> droppedCards
+  let newHand = (cards `Board.unsafeDifference`) <$> droppedCards
 
   let
     -- TODO: check that we cannot be blocked because too much -1

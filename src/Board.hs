@@ -8,7 +8,7 @@ module Board (
   nbCards,
   lookup,
   fromList,
-  difference,
+  unsafeDifference,
   singleton,
   weightedPickMap,
   toList,
@@ -60,14 +60,14 @@ mkBoard = Board . filterZero
 fromList :: [(Card, Natural)] -> Board
 fromList l = mkBoard (Map.fromListWith (+) l)
 
--- | @difference a b@ returns the 'Board' @a@ without cards of 'Board' @b@.
+-- | @unsafeDifference a b@ returns the 'Board' @a@ without cards of 'Board' @b@.
 -- This functions is *partial* and raises an exception if you try to
 -- remove cards which are not in the initial map.
-difference :: Board -> Board -> Board
-difference (Board a) (Board b) = mkBoard $ Merge.merge Merge.preserveMissing (Merge.mapMaybeMissing $ \k x -> error ("Merging incompatible Maps" <> show (k, x))) (Merge.zipWithMatched (\_k -> (-))) a b
+unsafeDifference :: Board -> Board -> Board
+unsafeDifference (Board a) (Board b) = mkBoard $ Merge.merge Merge.preserveMissing (Merge.mapMaybeMissing $ \k x -> error ("Merging incompatible Maps" <> show (k, x))) (Merge.zipWithMatched (\_k -> (-))) a b
 
 -- | So combining it with <> won't lead to disaster
-infixl 6 `difference`
+infixl 6 `unsafeDifference`
 
 -- | A board with only one card.
 singleton :: Card -> Board
