@@ -171,7 +171,7 @@ i) Drawing phase
 -}
 
 availableCards :: Game -> Board
-availableCards game = Board.allCards `Board.difference ` (foldMap board (players game))
+availableCards game = Board.allCards `Board.difference` (foldMap board (players game))
 
 drawPhase :: TopLevelGame -> TopLevelGame
 drawPhase TopLevelGame{game, randomGenerator} = let
@@ -368,8 +368,8 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card')
   -- Ensure we have the power
   | Just n <- preview (#handles . ix currentPlayerId . #_DoActions . #flipAction) tg
   , n > 0 =
-    over (#game . #players . ix targetId . #board) (\b -> b <> Board.singleton card' `Board.difference` Board.singleton card) $
-    over (#game . #players . ix targetId' . #board) (\b -> b <> Board.singleton card `Board.difference` Board.singleton card') $
+    over (#game . #players . ix targetId . #board) (\b -> (b <> Board.singleton card') `Board.difference` Board.singleton card) $
+    over (#game . #players . ix targetId' . #board) (\b -> (b <> Board.singleton card) `Board.difference` Board.singleton card') $
     over (#handles . ix currentPlayerId . #_DoActions . #flipAction) (subtract 1) $ tg
   | otherwise = tg
 

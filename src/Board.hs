@@ -66,6 +66,9 @@ fromList l = mkBoard (Map.fromListWith (+) l)
 difference :: Board -> Board -> Board
 difference (Board a) (Board b) = mkBoard $ Merge.merge Merge.preserveMissing (Merge.mapMaybeMissing $ \k x -> error ("Merging incompatible Maps" <> show (k, x))) (Merge.zipWithMatched (\_k -> (-))) a b
 
+-- | So combining it with <> won't lead to disaster
+infixl 6 `difference`
+
 -- | A board with only one card.
 singleton :: Card -> Board
 singleton c = Board (Map.singleton c 1)
