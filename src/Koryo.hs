@@ -375,28 +375,28 @@ flipCommand tg currentPlayerId (targetId, card) (targetId', card')
 
 
 dropCards :: TopLevelGame -> Int -> Board -> TopLevelGame
-dropCards tg' pId cards
-  | view (#game . #selectedPlayer) tg == view (#game . #currentFirstPlayer) tg = drawPhase (tg {
+dropCards tg' pId cards = case dropCardsForPlayer tg' pId cards of
+  Nothing -> tg'
+  Just tg
+    | view (#game . #selectedPlayer) tg == view (#game . #currentFirstPlayer) tg -> drawPhase (tg {
                                                                                             game = nextRound (game tg)
                                                                                             })
 
-  | otherwise = tg
-      where
-        tg = dropCardsForPlayer tg' pId cards
+    | otherwise -> tg
 
 -- idempotent
-dropCardsForPlayer :: TopLevelGame -> Int -> Board -> TopLevelGame
+dropCardsForPlayer :: TopLevelGame -> Int -> Board -> Maybe TopLevelGame
 dropCardsForPlayer tg pId droppedCards
   -- Ensure that it is the right player
   | pId == view (#game . #selectedPlayer) tg
-  && preview (#handles . ix pId) tg == Just WaitingForDestroying =
+  && preview (#handles . ix pId) tg == Just WaitingForDestroying = Just $
     -- go to next player
     over (#game . #selectedPlayer) (\i -> (i + 1) `mod` (length (view (#game . #players) tg))) $
     -- set current player to nothing to do
     set (#handles . ix pId) NothingToDo $
     -- remove his cards
     over (#game . #players . ix pId . #board) (flip Board.difference droppedCards) $ tg
-  | otherwise = tg
+  | otherwise = Nothing
 
 
 -- Commands
