@@ -133,24 +133,28 @@ updateSelection canBeFocused sel@(player, _) currentSel@(Selecting (SelectingFli
       | player'' == player -> Just (sel', Just sel) -- Replace selection on second player
       | otherwise -> Just (sel'', Just sel) -- Select and discard the oldest
 
+displayCard :: _ => Card -> Dynamic t Natural -> _ -> m (Event t Card)
+displayCard card dCount selectedCards = do
+  let selected selStatus count = cls <> ("data-count" =: Text.pack (show count))
+        where
+          cls
+            | card `Set.member` selStatus = ("class" =: ("selected card " <> (Text.pack $ show card)))
+            | otherwise = ("class" =: ("card " <> (Text.pack $ show card)))
+  (e, _) <- elDynAttr' "div" (selected <$> selectedCards <*> dCount) $ do
+        elClass "div" "help" $ do
+          elClass "div" "description" $ text $ description card
+          elClass "div" "marker" $ text "?"
+
+        widgetBurger card dCount
+  let cardClick = domEvent Click e
+  pure $ (card <$ cardClick)
+
 displayCards :: MonadWidget t m => Dynamic t (Set Card) -> Dynamic t Board -> m (Event t Card)
 displayCards selectedCards cards = do
   selectCardEvent <- elClass "div" "cards" $ do
     flip mapM [minBound..maxBound] $ \card -> do
       let dCount = Board.lookup card <$> cards
-      let selected selStatus count = cls <> ("data-count" =: Text.pack (show count))
-            where
-              cls
-                | card `Set.member` selStatus = ("class" =: ("selected card " <> (Text.pack $ show card)))
-                | otherwise = ("class" =: ("card " <> (Text.pack $ show card)))
-      (e, _) <- elDynAttr' "div" (selected <$> selectedCards <*> dCount) $ do
-            elClass "div" "help" $ do
-              elClass "div" "description" $ text $ description card
-              elClass "div" "marker" $ text "?"
-
-            widgetBurger card dCount
-      let cardClick = domEvent Click e
-      pure $ (card <$ cardClick)
+      displayCard card dCount selectedCards
 
   pure $ leftmost selectCardEvent
 
@@ -476,7 +480,7 @@ cardPicker cards pred = mdo
 handSelector :: MonadWidget t m => Bool -> Board -> m (Event t SelectedFromDraw)
 handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
   el "p" $ text "Selection des cartes."
-  currentSelection <- cardPicker cards (const True)
+  currentSelection <- el "div" $ cardPicker cards (const True)
 
   -- TODO: check that we have the card 5
   let validSelection = ffor currentSelection $ \m -> do
