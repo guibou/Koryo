@@ -28,6 +28,9 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       "grid-gap" -: "2vh"
 
 
+  button ? do
+    fontSize (em 2)
+
   body ? do
     backgroundColor lightpink
     color black
@@ -220,9 +223,15 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
   ".roundedBlock" ? do
     borderWidth (px 4)
-    borderColor purple
+    borderColor darkcyan
     borderStyle solid
-    backgroundColor orchid
+    backgroundColor aquamarine
+
+  ".destroyor" ? do
+    borderWidth (px 4)
+    borderColor coral
+    borderStyle solid
+    backgroundColor crimson
 
   ".coins.canSteal:first-child" ? do
       animation "blinkCoin" (sec 1) linear (sec 0) infinite alternate forwards

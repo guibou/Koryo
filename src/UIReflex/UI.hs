@@ -186,7 +186,7 @@ displayHand :: forall t m. MonadWidget t m
             -> m (Event t CardSelectionMode, Event t KoryoCommands)
 displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId) (traceDyn "CurrentSelection"->dCurrentSelection) majoritySelector = \case
   NothingToDo -> elClass "div" "roundedBlock" $ text "Votre tour est fini. Attendez le prochain." >> pure (never, never)
-  WaitingForDestroying -> elClass "div" "roundedBlock" $ do
+  WaitingForDestroying -> elClass "div" "roundedBlock destroyor" $ do
     eDestroy <- dyn $ (handDestroyor <$> dGame <*> dCurrentPlayerId)
     eDestroyS <- switchHold never eDestroy
 
@@ -502,10 +502,15 @@ handSelector majorityOf5 cards = elClass "div" "roundedBlock" $ mdo
 
 handDestroyor :: MonadWidget t m => Game -> Int -> m (Event t KoryoCommands)
 handDestroyor game pId
-  | selectedPlayer game /= pId = elDynClass "div" "roundedBlock" $ text "Phase de défausse. Attendez votre tour." >> pure never
-  | otherwise = elDynClass "div" "roundedBlock" $ mdo
+  | selectedPlayer game /= pId = text "Phase de défausse. Attendez votre tour." >> pure never
+  | otherwise = mdo
   let cards = view (#players . ix pId . #board) game
-  el "p" $ text "Choisissez les cartes à supprimer. La ligne du haut correspond aux cartes à conserver."
+  el "p" $ do
+    text "Suppression des cartes. Nombre actuel : "
+    display currentNbCards
+    text " / "
+    display maxCardForMe
+    text " maximum."
 
   let
     currentNbCards = nbCards <$> newHand
@@ -514,13 +519,6 @@ handDestroyor game pId
 
     maxCardForMe = ffor newGame $ \game ->
       (cardsOnBoardAtRound . currentRound $ game) + bool 0 2 (majorityOnNewBoard game)
-
-  el "p" $ do
-    text "Nombre actuel de carte : "
-    display currentNbCards
-  el "p" $ do
-    text "Vous pouvez en conserver : "
-    display maxCardForMe
 
   droppedCards <- cardPicker cards (\c -> c /= Cm1_KillOne && c /= Cm1_FlipTwo)
   let newHand = (cards `Board.unsafeDifference`) <$> droppedCards
@@ -532,7 +530,7 @@ handDestroyor game pId
   let
     buttonStatus = bool ("disabled" =: "disabled") mempty <$> validSelection
 
-  (button, _) <- elDynAttr' "button" buttonStatus $ text "Valider la selection"
+  (button, _) <- elDynAttr' "button" buttonStatus $ dynText ((\c -> [fmt|Supprimer {nbCards c} cartes|]) <$> droppedCards)
 
   pure $ current (DropCards <$> droppedCards) <@ domEvent Click button
 
