@@ -10,12 +10,22 @@ import Assets
 import Data.String
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import Clay.Stylesheet
 
 css :: Text -> ByteString
 css hostname = (encodeUtf8 . toStrict . render) $ do
+  query (MediaType "") [Feature "orientation" (Just "landscape")] $ do
+    body ? do
+      backgroundColor red
+
+  query (MediaType "") [Feature "orientation" (Just "portrait")] $ do
+    body ? do
+      backgroundColor red
+
+
   body ? do
-    backgroundColor indigo
-    color white
+    backgroundColor lightpink
+    color black
 
   "td" ? do
     borderColor green
@@ -28,8 +38,6 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       borderColor black
       borderWidth (px 1)
       borderStyle solid
-  ".handle" |> "div" ? do
-    display flex
 
   ".firstPlayer" ? do
     color gold
@@ -38,15 +46,16 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     color red
 
   ".players" |> "div:nth-child(1)" ? do
-    -- marginBottom (vh 5)
-    borderColor green
+    borderColor deeppink
     borderWidth (px 5)
     borderStyle solid
 
   ".players" |> div ? do
+    margin (vh 2) 0 (vh 2) 0
     borderColor black
     borderWidth (px 1)
     borderStyle solid
+    backgroundColor darkmagenta
 
   ".cards" ? do
     display flex
@@ -83,7 +92,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     "max-height" -: "20vh"
 
   ".card" ? do
-    "transition" -: "width 1s"
+    -- "transition" -: "width 1s"
     backgroundRepeat noRepeat
 
   ".card" ? ".burger" ? do
@@ -195,8 +204,12 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     borderStyle solid
     backgroundColor orchid
 
-  ".coins.canSteal" ? ".last" ? do
+  ".coins.canSteal:first-child" ? do
       animation "blinkCoin" (sec 1) linear (sec 0) infinite alternate forwards
+
+
+  ".gameStatus" ? ".coins" ? do
+    marginLeft auto
 
   ".coins" ? do
     display flex
@@ -211,7 +224,8 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       backgroundImage (url $ coin_url hostname)
       backgroundSize contain
       backgroundRepeat noRepeat
-      width (vw 4)
+      width (vw 5)
+      height (vw 5)
       "span" ? do
         visibility hidden
 
@@ -247,3 +261,5 @@ Tentative to disable animation on load
 
   ".name" ? do
     display flex
+    fontSize (em 2)
+    color white
