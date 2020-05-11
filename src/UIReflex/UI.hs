@@ -338,7 +338,7 @@ widgetGame dPayload = mdo
 
       pure $ gate (current canTakeCoinDyn) (TakeCoinCommand <$ click)
 
-    (commandArea, selectionEvt) <- elClass "div" "gameArea players" $ mdo
+    (commandArea, selectionEvt) <- elClass "div" "gameArea" $ mdo
       (selectionEvent, commandFromHand) <- elClass "div" "handle" $ do
         e <- dyn (traceDynWith (const "displayHand") $ displayHand dg dCurrentPlayerId currentSelection <$> ((\(p, pID) -> (\c -> (evaluateMajorityFor c) p == Just pID)) <$> ((,) <$> (traceDyn "board" dBoard) <*> (traceDyn "pid" dCurrentPlayerId))) <*> (traceDyn "hand" dHand))
         let (a, b) = splitE e
@@ -347,7 +347,7 @@ widgetGame dPayload = mdo
 
         pure (a', b')
 
-      (ePlayer :: _) <- do
+      (ePlayer :: _) <- elClass "div" "players" $ do
         asList <- listDyn (players <$> dg)
 
         evts <- dyn $ do

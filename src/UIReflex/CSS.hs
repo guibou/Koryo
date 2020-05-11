@@ -28,16 +28,8 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       borderColor black
       borderWidth (px 1)
       borderStyle solid
-
-  ".gameArea" ? do
+  ".handle" |> "div" ? do
     display flex
-    -- flexDirection column
-    "flex-wrap" -: "wrap"
-
-  ".players" ? do
-    display flex
-    "flex-wrap" -: "wrap"
-    mempty
 
   ".firstPlayer" ? do
     color gold
@@ -45,8 +37,8 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
   ".currentPlayer" ? do
     color red
 
-  ".players" |> "div:nth-child(2)" ? do
-    marginBottom (vh 5)
+  ".players" |> "div:nth-child(1)" ? do
+    -- marginBottom (vh 5)
     borderColor green
     borderWidth (px 5)
     borderStyle solid
@@ -85,8 +77,10 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     position relative
 
     backgroundSize contain
-    width (vw 12)
-    height (vw (12 / 0.81))
+    width (vw 20)
+    height (vw (20 / 0.81))
+    "max-width" -: "calc(0.81 * 20vh)"
+    "max-height" -: "20vh"
 
   ".card" ? do
     "transition" -: "width 1s"
