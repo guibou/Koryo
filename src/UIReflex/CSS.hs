@@ -11,21 +11,27 @@ import Data.String
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Clay.Stylesheet
+import Clay.Media (screen)
 
 css :: Text -> ByteString
 css hostname = (encodeUtf8 . toStrict . render) $ do
-  query (MediaType "") [Feature "orientation" (Just "landscape")] $ do
-    body ? do
-      backgroundColor red
+  query screen [Feature "orientation" (Just "landscape")] $ do
+    ".players" ? do
+      display grid
+      "grid-template-columns" -: "1fr 1fr"
+      "grid-gap" -: "2vh"
 
-  query (MediaType "") [Feature "orientation" (Just "portrait")] $ do
-    body ? do
-      backgroundColor red
+  query screen [Feature "orientation" (Just "portrait")] $ do
+    ".players" ? do
+      display grid
+      "grid-template-columns" -: "1fr"
+      "grid-gap" -: "2vh"
 
 
   body ? do
     backgroundColor lightpink
     color black
+    fontSize (em 1.5)
 
   "td" ? do
     borderColor green
@@ -51,7 +57,6 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     borderStyle solid
 
   ".players" |> div ? do
-    margin (vh 2) 0 (vh 2) 0
     borderColor black
     borderWidth (px 1)
     borderStyle solid
@@ -85,11 +90,15 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
       opacity 100
     position relative
 
+    let
+      cardSize = 15
+      cardRatio = 0.81
+
     backgroundSize contain
-    width (vw 20)
-    height (vw (20 / 0.81))
-    "max-width" -: "calc(0.81 * 20vh)"
-    "max-height" -: "20vh"
+    width (vw cardSize)
+    height (vw (cardSize / cardRatio))
+    maxWidth (cardRatio *@ (vh cardSize))
+    maxHeight  (vh cardSize)
 
   ".card" ? do
     -- "transition" -: "width 1s"
@@ -261,5 +270,5 @@ Tentative to disable animation on load
 
   ".name" ? do
     display flex
-    fontSize (em 2)
+    fontSize (em 1.3)
     color white
