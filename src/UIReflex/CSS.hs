@@ -81,9 +81,11 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
 
   ".selecting-flip" ? ".card.selected" ? do
     outlineColor black
+    animation "tint-black" (sec 0.5) linear (sec 0) infinite alternate forwards
 
   ".selecting-fire" ? ".card.selected" ? do
     outlineColor red
+    animation "tint-red" (sec 0.5) linear (sec 0) infinite alternate forwards
 
   ".card" ? do
     ".help" ? do
@@ -147,6 +149,15 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
   ".blinking" ? "button" ? do
     animation "blinkingText" (sec 1) linear (sec 0) infinite alternate forwards
 
+  keyframes "tint-red" [
+    (0, "box-shadow" -: "0 3000px rgba(255, 0, 0, 0.8) inset"),
+    (100, "box-shadow" -: "0 3000px rgba(255, 0, 0, 0) inset")
+    ]
+
+  keyframes "tint-black" [
+    (0, "box-shadow" -: "0 3000px rgba(0, 0, 0, 0.8) inset"),
+    (100, "box-shadow" -: "0 3000px rgba(0, 0, 0, 0) inset")
+    ]
   keyframes "blinkingText" [
     (0, color black),
     (100, color red)
