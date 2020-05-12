@@ -225,7 +225,7 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
           then elClass "div" "roundedBlock" $ do
             el "p" $ text "Vous pouvez échanger des cartes:"
             e <- elDynClass "span" (blinkingClass <$> isFlipping) $ do
-              btn ([fmt|Echanger deux cartes {flipAction actions}|]) (constDyn True) (Selecting (SelectingFlip Nothing))
+              btn ([fmt|Echanger deux cartes (x{flipAction actions})|]) (constDyn True) (Selecting (SelectingFlip Nothing))
             runCommand <- btn "Confirmer l'échange" (ffor selectCommand $ \case
                                  Just (FlipCommand _ _) -> True
                                  _ -> False) ()
@@ -237,22 +237,17 @@ displayHand (traceDyn "Game"->dGame) (traceDyn "currentPlayer"->dCurrentPlayerId
              then elClass "div" "roundedBlock" $ do
                el "p" $ text "Vous pouvez détruire des cartes:"
                e <- elDynClass "span" (blinkingClass <$> isFiring) $ do
-                 btn [fmt|Détruire une carte {kill actions}|] (constDyn True) (Selecting (SelectingFire Nothing))
+                 btn [fmt|Détruire une carte (x{kill actions})|] (constDyn True) (Selecting (SelectingFire Nothing))
                runCommand <- btn "Confirmer la destruction de la carte ciblée." (ffor selectCommand $ \case
                                      Just (FireCommand _) -> True
                                      _ -> False) ()
                pure (e, fmapMaybe id (current selectCommand <@ runCommand))
              else pure (never, never)
                     ,
-        -- TODO: test that there are available coins
-        if majoritySelector C2_Ninja && stealCoin actions
-             then elClass "div" "roundedBlock" $ simpleText "Vous pouvez volez une pièce à un autre joueur. Regardez à coté de leur nom."
-             else pure (never, never)
-                    ,
         -- TODO: check that there is something to destroy
         if destroyCard actions && majoritySelector C4_KillMinusOne
              then elClass "div" "roundedBlock" $ do
-               e <- btn "Detruire une carte -1" (constDyn True) DestroyCardCommand
+               e <- btn "Détruire une carte -1" (constDyn True) DestroyCardCommand
                pure (never, e)
              else pure (never, never)
                     ]
@@ -402,7 +397,7 @@ widgetBurger card val = do
 
 runUIDeveloper :: [String] -> IO ()
 runUIDeveloper names = mainWidgetWithHead koryoHead $ do
-  flip mapM_ names $ \name -> do
+  elClass "div" "devMode" $ flip mapM_ names $ \name -> do
     el "div" $ koryoMain (Just name)
 
 runUI :: Maybe String -> IO ()

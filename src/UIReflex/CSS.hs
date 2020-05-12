@@ -233,7 +233,7 @@ css hostname = (encodeUtf8 . toStrict . render) $ do
     borderStyle solid
     backgroundColor crimson
 
-  ".coins.canSteal:first-child" ? do
+  ".coins.canSteal" ? ":first-child" ? do
       animation "blinkCoin" (sec 1) linear (sec 0) infinite alternate forwards
 
 
@@ -292,3 +292,8 @@ Tentative to disable animation on load
     display flex
     fontSize (em 1.3)
     color white
+
+
+  ".devMode" ? do
+    display grid
+    "grid-template-columns" -: "1fr 1fr"
