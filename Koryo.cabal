@@ -49,6 +49,10 @@ library
   if(!impl(ghcjs))
     build-depends: websockets
 
+  if impl(ghcjs)
+    ghc-options:    -dedupe
+    cpp-options:    -DGHCJS_BROWSER
+
 test-suite koryo-tests
   import: shared-properties
 
@@ -73,6 +77,11 @@ test-suite koryo-tests
 executable ui
   main-is: app/MainUI.hs
   build-depends: base, Koryo
+
+  if impl(ghcjs)
+    ghc-options:    -dedupe
+    cpp-options:    -DGHCJS_BROWSER
+
 
 executable server
  main-is: app/MainServer.hs

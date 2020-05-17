@@ -4,6 +4,8 @@ let
 in
 rec {
   rp = reflexProject;
+  ui = haskell.lib.dontHaddock reflexProject.ghcjs.Koryo;
+
   runKoryo = writeScript "run-koryo" ''
      ${python3}/bin/python3 -m http.server --directory ${client} 3003&
      ${python3}/bin/python3 -m http.server  --directory ${client} 3004&
