@@ -15,7 +15,15 @@
 }).project ({ pkgs, ... }: {
   useWarp = true;
   packages = {
-    Koryo = ./.;
+    Koryo = pkgs.lib.sourceByRegex ./.  [
+    "Koryo\.cabal$"
+    "src"
+    "app"
+    "src/UIReflex"
+    "tests"
+    ".*\.hs$"
+    "LICENSE"
+  ];
   };
 
   shells = {

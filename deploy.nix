@@ -13,10 +13,18 @@ rec {
 
   server = reflexProject.ghc.Koryo;
 
-  client = runCommand "koryo-client" {} ''
+  client = runCommand "koryo-client" {
+    buildInputs = [pkgs.closurecompiler];
+  } ''
     mkdir -p $out
 
-    cp ${reflexProject.ghcjs.Koryo}/bin/ui.jsexe/* $out
-    cp ${./.}/images/*.png $out
+    cp ${ui}/bin/ui.jsexe/* $out
+    cp ${./images}/*.png $out
+
+    # Closure compiler pass
+    cd $out
+    closure-compiler --js out.js > out.js.compiled
+    rm out.js
+    mv out.js.compiled out.js
 '';
 }
