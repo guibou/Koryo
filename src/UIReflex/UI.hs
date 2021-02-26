@@ -16,11 +16,11 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS -Wno-name-shadowing #-}
 
-module UIReflex.UI (runUI, runUIDeveloper) where
+module UIReflex.UI (ui, uiDeveloper) where
 
 import UIReflex.CSS
 
-import Reflex.Dom hiding (FireCommand)
+import Reflex.Dom.Core hiding (FireCommand)
 import qualified Data.Text as Text
 import Control.Monad (void)
 import PyF (fmt)
@@ -395,13 +395,11 @@ widgetBurger card val = do
                            EQ -> "eq visible"
                            GT -> "gt") <$> val) $ el "span" $ text (Text.pack $ show i)
 
-runUIDeveloper :: [String] -> IO ()
-runUIDeveloper names = mainWidgetWithHead koryoHead $ do
+uiDeveloper names = mainWidgetWithHead koryoHead $ do
   elClass "div" "devMode" $ flip mapM_ names $ \name -> do
     el "div" $ koryoMain (Just name)
 
-runUI :: Maybe String -> IO ()
-runUI p = mainWidgetWithHead koryoHead (koryoMain p)
+ui p = mainWidgetWithHead koryoHead (koryoMain p)
 
 koryoHead :: _ => m ()
 koryoHead = do

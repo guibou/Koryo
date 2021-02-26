@@ -32,7 +32,8 @@ library
 
   exposed-modules:     UIReflex.UI, UIReflex.CSS, Koryo, Assets, Board, Cards
   if(!impl(ghcjs))
-    exposed-modules: Server
+    exposed-modules: Server, UIReflex.Runner
+    build-depends: warp, jsaddle-warp, wai-middleware-static
   build-depends:       base
                      , reflex
                      , clay
@@ -76,7 +77,7 @@ test-suite koryo-tests
 
 executable ui
   main-is: app/MainUI.hs
-  build-depends: base, Koryo
+  build-depends: base, Koryo, jsaddle-warp
 
   if impl(ghcjs)
     ghc-options:    -dedupe

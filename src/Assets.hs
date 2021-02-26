@@ -22,10 +22,10 @@ card_path = \case
   Cm1_FlipTwo -> "noire.png"
 
 card_url :: Text -> Card -> Text
-card_url hostname c = "http://" <> hostname <> ":3004/" <> card_path c
+card_url hostname c = "http://" <> hostname <> ":3003/images/" <> card_path c
 
 -- Coin from https://en.wikipedia.org/wiki/Coin#/media/File:Claudius_II_coin_(colourised).png
-coin_url hostname = "http://" <> hostname <> ":3004/coin.png"
+coin_url hostname = "http://" <> hostname <> ":3003/images/coin.png"
 
 -- backgroundImage (url $ "data:image/png;base64," <> card_images card)
 

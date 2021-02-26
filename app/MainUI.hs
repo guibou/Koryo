@@ -1,3 +1,5 @@
 import UIReflex.UI
 
-main = runUI Nothing
+import Language.Javascript.JSaddle.Warp (run)
+
+main = run 3003 (ui Nothing)
