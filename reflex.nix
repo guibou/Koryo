@@ -1,4 +1,8 @@
+let
+  rev = "f019863";
+  sha256 = "146xfjqdwd55s9jg1ggi6akcxxxd5c0pvc4bpjx3whwiikpcv8y4";
+in
 import (builtins.fetchTarball {
-  url = https://github.com/reflex-frp/reflex-platform/archive/58873162d542c14cf198e9711986c046b06a18da.tar.gz;
-  sha256 = "1bik0f23n0kvv8205iz61574jlybzqiz6c814ci5l35ablqs66ll";
+  url = "https://github.com/reflex-frp/reflex-platform/archive/${rev}.tar.gz";
+  inherit sha256;
 })
