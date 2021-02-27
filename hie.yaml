@@ -2,3 +2,9 @@ cradle:
   cabal:
     - path: "./src"
       component: "Koryo:lib:Koryo"
+    - path: "./tests"
+      component: "Koryo:test:koryo-tests"
+    - path: "./app/MainServer.hs"
+      component: "Koryo:exe:server"
+    - path: "./app/MainUI.hs"
+      component: "Koryo:exe:ui"

@@ -1,5 +1,9 @@
 let
-  pkgs = import ./nixpkgs.nix {};
+  pkgs = import ./nixpkgs.nix {
+    overlays = [
+      (import ./hls_overlay.nix)
+    ];
+  };
 
   reflex = import ./reflex.nix {
     config .android_sdk.accept_license = true;
