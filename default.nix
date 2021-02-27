@@ -1,7 +1,10 @@
 let
   pkgs = import ./nixpkgs.nix {
     overlays = [
-      (import ./hls_overlay.nix)
+      # Disable by default because it rebuild the world
+      # However, if you are OK to pay this rebuild price, HLS 1.0.0.0 is really
+      # better (support for find reference, definition, and faster, way faster)
+      # (import ./hls_overlay.nix)
     ];
   };
 
