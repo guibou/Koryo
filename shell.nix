@@ -1,1 +1,1 @@
-(import ./.).shells.ghc
+(import ./.).shell_hls
